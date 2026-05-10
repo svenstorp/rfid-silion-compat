@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rfidlibrs Web Serial Demo</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #2ea043;
+        --danger: #f85149;
+        --border: #30363d;
+      }
+      body {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        background: radial-gradient(circle at 20% 0%, #1f2937, var(--bg) 50%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 16px;
+      }
+      .panel {
+        background: color-mix(in srgb, var(--panel), black 10%);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      input, button {
+        background: #0f141b;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button.primary {
+        border-color: color-mix(in srgb, var(--accent), black 25%);
+        background: color-mix(in srgb, var(--accent), black 70%);
+      }
+      button.danger {
+        border-color: color-mix(in srgb, var(--danger), black 25%);
+        background: color-mix(in srgb, var(--danger), black 75%);
+      }
+      #log {
+        min-height: 280px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #0b0f14;
+        padding: 12px;
+      }
+      .hint {
+        color: var(--muted);
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>rfidlibrs Browser Demo</h1>
+      <div class="panel">
+        <div class="row">
+          <label>
+            Baud:
+            <input id="baud" type="number" value="115200" />
+          </label>
+          <button id="connect" class="primary">Connect</button>
+          <button id="close" class="danger">Close</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Reader Info</div>
+        <div class="row">
+          <button id="version">Get Version</button>
+          <button id="getSerialNumber">Serial Number</button>
+          <button id="getCurrentTagProtocol">Current Protocol</button>
+          <button id="getRunPhase">Run Phase</button>
+          <button id="getCurrentTemperature">Temperature</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Inventory</div>
+        <div class="row">
+          <button id="start">Start Inventory</button>
+          <button id="stop">Stop Inventory</button>
+          <button id="transact">Transact Raw</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Region</div>
+        <div class="row">
+          <button id="getCurrentRegion">Get Region</button>
+          <button id="setCurrentRegion">Set Region</button>
+          <button id="getAvailableRegions">List Regions</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">GPIO</div>
+        <div class="row">
+          <button id="getGpi">Read GPI</button>
+          <button id="getGpoStates">Get GPO States</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Antenna</div>
+        <div class="row">
+          <button id="getAntennaPorts">Get Ports</button>
+          <button id="setAntennaAccessPair">Set Access Pair</button>
+          <button id="setAntennaInventoryPairs">Set Inventory Pairs</button>
+          <button id="setAntennaPower">Set Power</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">RF / Config</div>
+        <div class="row">
+          <button id="getFrequencyHoppingTable">Hop Table</button>
+          <button id="getRegulatoryHopTime">Hop Time</button>
+          <button id="getReaderConfiguration">Reader Config</button>
+          <button id="getProtocolConfiguration">Protocol Config</button>
+        </div>
+
+        <hr style="border: 1px solid var(--border); margin: 12px 0;" />
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Firmware</div>
+        <div class="row">
+          <button id="getRunPhaseForBoot">Check Run Phase</button>
+          <button id="bootFirmware">Boot Firmware</button>
+          <button id="bootBootloader">Boot Bootloader</button>
+        </div>
+
+        <div id="log"></div>
+        <p class="hint">
+          Click Connect from a user gesture to allow Web Serial device selection.
+        </p>
+      </div>
+    </div>
+
+    <!-- main.js is compiled from main.ts using: npx tsc -->
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

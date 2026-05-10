@@ -1,0 +1,55 @@
+#!/bin/bash
+set -e
+
+if ! command -v wasm-pack >/dev/null 2>&1; then
+  echo "Error: wasm-pack is not installed."
+  echo "Install it with: cargo install wasm-pack"
+  exit 1
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Error: node is not installed."
+  echo "Install Node.js (includes npm) and re-run this script."
+  exit 1
+fi
+
+# Extract version from Cargo.toml
+CARGO_TOML="Cargo.toml"
+VERSION=$(grep '^version' "$CARGO_TOML" | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+if [ -z "$VERSION" ]; then
+  echo "Error: Could not extract version from Cargo.toml"
+  exit 1
+fi
+
+echo "Building npm package for rfidlibrs v$VERSION..."
+
+# Run wasm-pack to build the bundler target (suitable for Node.js and bundlers)
+wasm-pack build --target bundler --release -- --features web-serial
+
+# Update package.json with the version from Cargo.toml
+PACKAGE_JSON="pkg/package.json"
+if [ -f "$PACKAGE_JSON" ]; then
+  # Use Node.js to update the version field (more reliable than sed)
+  node -e "
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync('$PACKAGE_JSON', 'utf8'));
+    pkg.version = '$VERSION';
+    fs.writeFileSync('$PACKAGE_JSON', JSON.stringify(pkg, null, 2) + '\n');
+  "
+  echo "Updated package.json version to $VERSION"
+else
+  echo "Warning: pkg/package.json not found"
+  exit 1
+fi
+
+echo ""
+echo "✓ npm package built successfully!"
+echo ""
+echo "Package location: ./pkg"
+echo "Package version:  $VERSION"
+echo ""
+echo "Next steps:"
+echo "  npm publish ./pkg              # Publish to npm registry"
+echo "  npm install ./pkg              # Install locally"
+echo ""

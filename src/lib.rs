@@ -61,6 +61,10 @@ pub mod serial;
 /// Web Serial transport adapter for browser targets.
 pub mod web_serial;
 
+#[cfg(all(target_arch = "wasm32", feature = "web-serial"))]
+/// wasm-bindgen JavaScript bindings for the host API.
+pub mod web_bindings;
+
 pub use error::ProtocolError;
 pub use codes::{AntennaPortsOption, CommandCode, RegionCode, StatusCode};
 pub use frame::{build_host_frame, parse_reader_frame, protocol_crc16, ReaderFrame};

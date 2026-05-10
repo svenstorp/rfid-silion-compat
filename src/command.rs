@@ -71,6 +71,7 @@ impl From<InventoryOption> for u8 {
 /// - bit 15: heartbeat enable
 /// - bit 14: auto-stop enable
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
 pub struct InventorySearchFlags(u16);
 
 impl InventorySearchFlags {
@@ -189,6 +190,7 @@ impl Default for InventorySearchFlags {
 /// |  6  | 0x0040 | Protocol ID   | 1 byte  | Tag protocol (0x05 = Gen2) |
 /// |  7  | 0x0080 | Data Length   | 2 bytes | Tag data length (0x0000 for 0x21) |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
 pub struct MetadataFlags(u16);
 
 impl MetadataFlags {

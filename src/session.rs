@@ -52,6 +52,17 @@ impl<T: ReaderTransport> AsyncInventorySession<T> {
 
         Ok(SilionHost::from_client(self.client))
     }
+
+    /// Send `0xAA49` and recover the host without waiting for `StopAck`.
+    ///
+    /// This is useful for environments where an in-flight async receive was
+    /// canceled and waiting for the acknowledgement could otherwise block
+    /// indefinitely.
+    pub async fn stop_no_wait(mut self) -> Result<SilionHost<T>, ClientError<T::Error>> {
+        let stop_packet = HostCommand::async_stop().map_err(ClientError::Protocol)?;
+        self.client.write_frame(&stop_packet).await?;
+        Ok(SilionHost::from_client(self.client))
+    }
 }
 
 #[cfg(test)]

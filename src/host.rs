@@ -25,6 +25,8 @@ pub struct SilionHost<T: ReaderTransport> {
 
 /// One asynchronous inventory message pushed by the reader.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(tag = "kind", rename_all = "camelCase"))]
 pub enum AsyncInventoryMessage {
     /// Reader reply for Start AsyncInventory (`0xAA48`), no subcommand data.
     StartAck,
@@ -79,6 +81,18 @@ impl<T: ReaderTransport> SilionHost<T> {
     /// Consume the host API and return the wrapped low-level client.
     pub fn into_client(self) -> ReaderClient<T> {
         self.client
+    }
+
+    /// Run a raw command transaction and return the validated response frame.
+    ///
+    /// This is useful for callers that need command coverage beyond the typed
+    /// helper methods on `SilionHost`.
+    pub async fn transact_raw(
+        &mut self,
+        command: u8,
+        data: &[u8],
+    ) -> Result<crate::ReaderFrame, ClientError<T::Error>> {
+        self.client.transact(command, data).await
     }
 
     /// Convert this host into an awaited-read [`AsyncInventorySession`].
@@ -423,4 +437,57 @@ mod tests {
             other => panic!("unexpected async message: {other:?}"),
         }
     }
+
+    #[test]
+    #[cfg(feature = "web-serial")]
+    fn tag_information_serialization() {
+        use crate::parsers::TagEpcAndMetaData;
+        use crate::command::MetadataFlags;
+
+        let tag = TagEpcAndMetaData {
+            read_count: Some(1),
+            rssi_dbm: Some(-50),
+            antenna_id: Some(1),
+            frequency_khz: Some(902250),
+            timestamp_ms: Some(1000),
+            rfu: None,
+            protocol_id: Some(5),
+            tag_data_bit_length: None,
+            tag_data: None,
+            epc_bit_length: 96,
+            pc_word: 0x3000,
+            epc_id: vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06],
+            tag_crc: 0x1234,
+        };
+
+        let msg = AsyncInventoryMessage::TagInformation {
+            metadata_flags: MetadataFlags::from_raw(0x00FF),
+            tag,
+        };
+
+        let json_str = serde_json::to_string(&msg).expect("should serialize to JSON");
+        let json_value: serde_json::Value =
+            serde_json::from_str(&json_str).expect("should parse JSON");
+
+        // Check that the message has the expected kind
+        assert_eq!(json_value.get("kind").and_then(|v| v.as_str()), Some("tagInformation"));
+
+        // With no `flatten`, tag data must be nested under `tag`.
+        let tag_obj = json_value
+            .get("tag")
+            .and_then(|v| v.as_object())
+            .expect("tag should be an object");
+        assert!(tag_obj.get("epcId").is_some(), "tag.epcId should be present");
+        assert!(tag_obj.get("readCount").is_some(), "tag.readCount should be present");
+        assert!(tag_obj.get("rssiDbm").is_some(), "tag.rssiDbm should be present");
+        assert!(tag_obj.get("antennaId").is_some(), "tag.antennaId should be present");
+        assert!(tag_obj.get("frequencyKhz").is_some(), "tag.frequencyKhz should be present");
+        assert!(tag_obj.get("timestampMs").is_some(), "tag.timestampMs should be present");
+        assert!(tag_obj.get("protocolId").is_some(), "tag.protocolId should be present");
+        assert!(tag_obj.get("epcBitLength").is_some(), "tag.epcBitLength should be present");
+        assert!(tag_obj.get("pcWord").is_some(), "tag.pcWord should be present");
+        assert!(tag_obj.get("tagCrc").is_some(), "tag.tagCrc should be present");
+
+    }
+
 }

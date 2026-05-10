@@ -4,6 +4,8 @@ use crate::error::ProtocolError;
 
 /// Version information returned by 0x03/0x04 responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct VersionInfo {
     /// Bootloader version.
     pub bootloader_version: [u8; 4],
@@ -48,6 +50,8 @@ pub fn parse_version_info(data: &[u8]) -> Result<VersionInfo, ProtocolError> {
 
 /// Program phase returned by Get Run Phase (0x0C).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub enum RunPhase {
     /// Bootloader firmware layer (0x11).
     Bootloader,
@@ -77,6 +81,8 @@ pub fn parse_run_phase(data: &[u8]) -> Result<RunPhase, ProtocolError> {
 
 /// Serial number information returned by Get Serial Number (0x10).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct SerialNumberInfo {
     /// Year bytes as returned by reader.
     pub year: [u8; 4],
@@ -187,6 +193,8 @@ pub fn parse_frequency_hopping_table(data: &[u8]) -> Result<Vec<u32>, ProtocolEr
 
 /// Regulatory hopping time response from Get Frequency Hopping with option 0x01.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct RegulatoryHopTime {
     /// Option value, expected to be 0x01.
     pub option: u8,
@@ -209,6 +217,8 @@ pub fn parse_regulatory_hop_time(data: &[u8]) -> Result<RegulatoryHopTime, Proto
 
 /// Reader configuration triplet returned by Get Reader Configuration (0x6A).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct ReaderConfigurationValue {
     /// Option field.
     pub option: u8,
@@ -234,6 +244,8 @@ pub fn parse_reader_configuration_value(data: &[u8]) -> Result<ReaderConfigurati
 
 /// Protocol configuration triplet/quad returned by Get Protocol Configuration (0x6B).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct ProtocolConfigurationValue {
     /// Protocol value.
     pub protocol_value: u8,
@@ -282,6 +294,8 @@ pub fn parse_protocol_configuration_value(
 /// One parsed `Tag EPC and Meta Data` block as documented for command `0x29`
 /// (Get Tag Buffer) and reused by asynchronous inventory tag uploads.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct TagEpcAndMetaData {
     /// Number of times this tag was archived (bit 0).
     pub read_count: Option<u8>,
@@ -635,6 +649,8 @@ pub fn parse_tag_epc_and_meta_data(
 
 /// TX/RX antenna pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct AntennaPair {
     /// TX logical antenna number.
     pub tx: u8,
@@ -644,6 +660,8 @@ pub struct AntennaPair {
 
 /// Per-antenna power values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct AntennaPower {
     /// TX logical antenna number.
     pub tx: u8,
@@ -661,6 +679,8 @@ pub struct AntennaPower {
 
 /// Per-antenna power and settling time values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub struct AntennaPowerSettling {
     /// TX logical antenna number.
     pub tx: u8,
@@ -680,6 +700,8 @@ pub struct AntennaPowerSettling {
 
 /// Parsed response data for Get Antenna Ports (0x61).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", serde(rename_all = "camelCase"))]
 pub enum AntennaPortsResponse {
     /// Option 0x00, single TX/RX pair for tag access operations.
     AccessPair(AntennaPair),
