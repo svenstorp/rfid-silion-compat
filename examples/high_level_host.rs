@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use rfidlibrs::{protocol_crc16, CommandCode, ReaderTransport, SilionReader};
+use rfid_silion_compat::{CommandCode, ReaderTransport, SilionReader, protocol_crc16};
 
 #[derive(Debug)]
 struct MockTransport {

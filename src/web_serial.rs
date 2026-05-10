@@ -52,7 +52,10 @@ extern "C" {
     fn webSerialRequestPort(baud_rate: u32) -> Result<js_sys::Promise, JsValue>;
 
     #[wasm_bindgen(catch)]
-    fn webSerialWrite(handle: &JsValue, data: &js_sys::Uint8Array) -> Result<js_sys::Promise, JsValue>;
+    fn webSerialWrite(
+        handle: &JsValue,
+        data: &js_sys::Uint8Array,
+    ) -> Result<js_sys::Promise, JsValue>;
 
     #[wasm_bindgen(catch)]
     fn webSerialRead(handle: &JsValue) -> Result<js_sys::Promise, JsValue>;
@@ -136,7 +139,9 @@ impl WebSerialTransport {
             let chunk = JsFuture::from(promise).await?;
 
             if chunk.is_null() || chunk.is_undefined() {
-                return Err(JsValue::from_str("serial stream closed before enough bytes were read"));
+                return Err(JsValue::from_str(
+                    "serial stream closed before enough bytes were read",
+                ));
             }
 
             let bytes = js_sys::Uint8Array::new(&chunk);

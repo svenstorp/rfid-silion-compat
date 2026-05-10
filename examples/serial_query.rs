@@ -1,12 +1,11 @@
 #[cfg(feature = "serial")]
-use rfidlibrs::serial::SerialTransport;
+use rfid_silion_compat::serial::SerialTransport;
 #[cfg(feature = "serial")]
-use rfidlibrs::{
-    AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPortsResponse,
-    AntennaPower,
+use rfid_silion_compat::{
+    AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPortsResponse, AntennaPower,
     AsyncInventoryMessage, AsyncInventoryStartData, EmbeddedReadTagData,
-    InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MetadataFlags,
-    MemBank, SilionReader,
+    InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank, MetadataFlags,
+    SilionReader,
 };
 #[cfg(feature = "serial")]
 use std::env;
@@ -43,19 +42,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let phase = reader.get_run_phase().await?;
     println!("Run phase: {phase:?}");
 
-    if phase == rfidlibrs::RunPhase::Bootloader {
+    if phase == rfid_silion_compat::RunPhase::Bootloader {
         reader.boot_firmware().await?;
     }
 
     let region = reader.get_current_region().await?;
     println!("Current region: {region}");
 
-    if region != rfidlibrs::RegionCode::Europe {
-        reader.set_current_region(rfidlibrs::RegionCode::Europe).await?;
+    if region != rfid_silion_compat::RegionCode::Europe {
+        reader
+            .set_current_region(rfid_silion_compat::RegionCode::Europe)
+            .await?;
     }
 
     println!("Reading current antenna configuration...");
-    let current_access = reader.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
+    let current_access = reader
+        .get_antenna_ports(AntennaPortsOption::AccessPair)
+        .await?;
     let current_inventory = reader
         .get_antenna_ports(AntennaPortsOption::InventoryPairs)
         .await?;
@@ -75,24 +78,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const LOW_POWER_DBM_X100: u16 = 100;
 
     println!("Configuring antenna 1 only with low power...");
-    reader.set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
-        tx: 0x01,
-        rx: 0x01,
-    }))
-    .await?;
-    reader.set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(vec![AntennaPair {
-        tx: 0x01,
-        rx: 0x01,
-    }]))
-    .await?;
-    reader.set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
-        tx: 0x01,
-        read_power: LOW_POWER_DBM_X100,
-        write_power: LOW_POWER_DBM_X100,
-    }]))
-    .await?;
+    reader
+        .set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
+            tx: 0x01,
+            rx: 0x01,
+        }))
+        .await?;
+    reader
+        .set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(vec![
+            AntennaPair { tx: 0x01, rx: 0x01 },
+        ]))
+        .await?;
+    reader
+        .set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
+            tx: 0x01,
+            read_power: LOW_POWER_DBM_X100,
+            write_power: LOW_POWER_DBM_X100,
+        }]))
+        .await?;
 
-    let updated_access = reader.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
+    let updated_access = reader
+        .get_antenna_ports(AntennaPortsOption::AccessPair)
+        .await?;
     let updated_inventory = reader
         .get_antenna_ports(AntennaPortsOption::InventoryPairs)
         .await?;
@@ -147,7 +154,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         match session.recv().await? {
-            AsyncInventoryMessage::TagInformation { metadata_flags, tag } => {
+            AsyncInventoryMessage::TagInformation {
+                metadata_flags,
+                tag,
+            } => {
                 println!(
                     "  Tag\n    metadata_flags: 0x{flags:04X}\n    read_count: {read_count:?}\n    rssi_dbm: {rssi:?}\n    antenna_id: {antenna_id:?}\n    frequency_khz: {frequency:?}\n    timestamp_ms: {timestamp:?}\n    rfu: {rfu:?}\n    protocol_id: {protocol_id:?}\n    tag_data_bit_length: {tag_data_bits:?}\n    tag_data: {tag_data:02X?}\n    epc_bit_length: {epc_bits}\n    pc_word: 0x{pc:04X}\n    epc_id: {epc:02X?}\n    tag_crc: 0x{crc:04X}",
                     flags = metadata_flags.raw(),
@@ -205,7 +215,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(not(feature = "serial"))]
 fn main() {
     eprintln!("Enable the 'serial' feature to run this example.");
-    eprintln!(
-        "Example: cargo run --features serial --example serial_query -- /dev/ttyUSB0 115200"
-    );
+    eprintln!("Example: cargo run --features serial --example serial_query -- /dev/ttyUSB0 115200");
 }

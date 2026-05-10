@@ -9,9 +9,9 @@ use wasm_bindgen_futures::JsFuture;
 use futures::future::{AbortHandle, Abortable};
 
 use crate::command::AsyncInventoryStartData;
-use crate::silion_reader::SilionReader;
 use crate::parsers::VersionInfo;
 use crate::session::AsyncInventorySession;
+use crate::silion_reader::SilionReader;
 use crate::web_serial::WebSerialTransport;
 use crate::{
     AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPower,
@@ -23,8 +23,7 @@ fn js_error(msg: &str) -> JsValue {
     JsValue::from_str(msg)
 }
 
-const READER_UNAVAILABLE_ERROR: &str =
-    "reader is not connected or is currently in inventory mode";
+const READER_UNAVAILABLE_ERROR: &str = "reader is not connected or is currently in inventory mode";
 
 fn debug_error<E: Debug>(err: E) -> JsValue {
     JsValue::from_str(&format!("{err:?}"))
@@ -141,10 +140,7 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = getVersion)]
     pub async fn get_version(&self) -> Result<JsValue, JsValue> {
         let mut reader = self.reader_mut()?;
-        let version = reader
-            .get_version()
-            .await
-            .map_err(debug_error)?;
+        let version = reader.get_version().await.map_err(debug_error)?;
         version.try_into()
     }
 
@@ -152,28 +148,21 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = bootFirmware)]
     pub async fn boot_firmware(&self) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        reader.boot_firmware()
-            .await
-            .map_err(debug_error)
+        reader.boot_firmware().await.map_err(debug_error)
     }
 
     /// Run command `0x09` (Boot Bootloader).
     #[wasm_bindgen(js_name = bootBootloader)]
     pub async fn boot_bootloader(&self) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        reader.boot_bootloader()
-            .await
-            .map_err(debug_error)
+        reader.boot_bootloader().await.map_err(debug_error)
     }
 
     /// Run command `0x0C` (Get Run Phase).
     #[wasm_bindgen(js_name = getRunPhase)]
     pub async fn get_run_phase(&self) -> Result<JsValue, JsValue> {
         let mut reader = self.reader_mut()?;
-        let phase = reader
-            .get_run_phase()
-            .await
-            .map_err(debug_error)?;
+        let phase = reader.get_run_phase().await.map_err(debug_error)?;
         phase.try_into()
     }
 
@@ -192,30 +181,23 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = getCurrentTagProtocol)]
     pub async fn get_current_tag_protocol(&self) -> Result<u16, JsValue> {
         let mut reader = self.reader_mut()?;
-        reader.get_current_tag_protocol()
-            .await
-            .map_err(debug_error)
+        reader.get_current_tag_protocol().await.map_err(debug_error)
     }
 
     /// Run command `0x97` (Set Current Region) using a raw region code byte.
     #[wasm_bindgen(js_name = setCurrentRegion)]
     pub async fn set_current_region(&self, region_code: u8) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        let region = RegionCode::from_u8(region_code)
-            .ok_or_else(|| js_error("unknown region code"))?;
-        reader.set_current_region(region)
-            .await
-            .map_err(debug_error)
+        let region =
+            RegionCode::from_u8(region_code).ok_or_else(|| js_error("unknown region code"))?;
+        reader.set_current_region(region).await.map_err(debug_error)
     }
 
     /// Run command `0x67` (Get Current Region) and return the raw region code.
     #[wasm_bindgen(js_name = getCurrentRegion)]
     pub async fn get_current_region(&self) -> Result<u8, JsValue> {
         let mut reader = self.reader_mut()?;
-        let region = reader
-            .get_current_region()
-            .await
-            .map_err(debug_error)?;
+        let region = reader.get_current_region().await.map_err(debug_error)?;
         Ok(region.as_u8())
     }
 
@@ -223,10 +205,7 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = getAvailableRegions)]
     pub async fn get_available_regions(&self) -> Result<Uint8Array, JsValue> {
         let mut reader = self.reader_mut()?;
-        let regions = reader
-            .get_available_regions()
-            .await
-            .map_err(debug_error)?;
+        let regions = reader.get_available_regions().await.map_err(debug_error)?;
         let out: Vec<u8> = regions.into_iter().map(|r| r.as_u8()).collect();
         Ok(Uint8Array::from(out.as_slice()))
     }
@@ -235,19 +214,14 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = getCurrentTemperature)]
     pub async fn get_current_temperature(&self) -> Result<u8, JsValue> {
         let mut reader = self.reader_mut()?;
-        reader.get_current_temperature()
-            .await
-            .map_err(debug_error)
+        reader.get_current_temperature().await.map_err(debug_error)
     }
 
     /// Run command `0x66` (Get GPI).
     #[wasm_bindgen(js_name = getGpi)]
     pub async fn get_gpi(&self) -> Result<Uint8Array, JsValue> {
         let mut reader = self.reader_mut()?;
-        let states = reader
-            .get_gpi()
-            .await
-            .map_err(debug_error)?;
+        let states = reader.get_gpi().await.map_err(debug_error)?;
         Ok(Uint8Array::from(states.as_slice()))
     }
 
@@ -255,10 +229,7 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = getGpoStates)]
     pub async fn get_gpo_states(&self) -> Result<Uint8Array, JsValue> {
         let mut reader = self.reader_mut()?;
-        let states = reader
-            .get_gpo_states()
-            .await
-            .map_err(debug_error)?;
+        let states = reader.get_gpo_states().await.map_err(debug_error)?;
         Ok(Uint8Array::from(states.as_slice()))
     }
 
@@ -266,7 +237,11 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = setAntennaAccessPair)]
     pub async fn set_antenna_access_pair(&self, tx: u8, rx: u8) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        reader.set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair { tx, rx }))
+        reader
+            .set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
+                tx,
+                rx,
+            }))
             .await
             .map_err(debug_error)
     }
@@ -275,7 +250,9 @@ impl WasmSilionReader {
     #[wasm_bindgen(js_name = setAntennaInventoryPairs)]
     pub async fn set_antenna_inventory_pairs(&self, pairs: &[u8]) -> Result<(), JsValue> {
         if pairs.is_empty() || (pairs.len() % 2 != 0) {
-            return Err(js_error("pairs must be non-empty and contain [tx, rx] byte pairs"));
+            return Err(js_error(
+                "pairs must be non-empty and contain [tx, rx] byte pairs",
+            ));
         }
 
         let mut reader = self.reader_mut()?;
@@ -286,7 +263,8 @@ impl WasmSilionReader {
                 rx: chunk[1],
             });
         }
-        reader.set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(out))
+        reader
+            .set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(out))
             .await
             .map_err(debug_error)
     }
@@ -300,13 +278,14 @@ impl WasmSilionReader {
         write_power: u16,
     ) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        reader.set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
-            tx,
-            read_power,
-            write_power,
-        }]))
-        .await
-        .map_err(debug_error)
+        reader
+            .set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
+                tx,
+                read_power,
+                write_power,
+            }]))
+            .await
+            .map_err(debug_error)
     }
 
     /// Run command `0x65` (Get Frequency Hopping table form).
@@ -399,7 +378,8 @@ impl WasmSilionReader {
             embedded_command_content: None,
         };
 
-        reader.enable_async_inventory(&start_data)
+        reader
+            .enable_async_inventory(&start_data)
             .await
             .map_err(debug_error)?;
 
@@ -440,10 +420,7 @@ impl WasmSilionReader {
 
         loop {
             if let Some(session) = self.session.borrow_mut().take() {
-                let reader = session
-                    .stop_no_wait()
-                    .await
-                    .map_err(debug_error)?;
+                let reader = session.stop_no_wait().await.map_err(debug_error)?;
                 *self.reader.borrow_mut() = Some(reader);
                 return Ok(());
             }

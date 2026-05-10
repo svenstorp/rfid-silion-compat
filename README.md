@@ -1,4 +1,4 @@
-# rfidlibrs
+# rfid-silion-compat
 
 Async Rust reader library for Silion RFID reader protocol communication.
 
@@ -40,13 +40,13 @@ cargo install wasm-pack
 Add to your project:
 
 ```bash
-cargo add rfidlibrs
+cargo add rfid-silion-compat
 ```
 
 Enable native serial support when needed:
 
 ```bash
-cargo add rfidlibrs --features serial
+cargo add rfid-silion-compat --features serial
 ```
 
 ## Quick Start
@@ -72,8 +72,8 @@ cargo run --features serial --example serial_query -- /dev/ttyUSB0 115200
 ### Minimal Rust API usage
 
 ```rust
-use rfidlibrs::serial::SerialTransport;
-use rfidlibrs::SilionReader;
+use rfid_silion_compat::serial::SerialTransport;
+use rfid_silion_compat::SilionReader;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

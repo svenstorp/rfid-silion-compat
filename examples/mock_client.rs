@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 use std::fmt;
 
-use rfidlibrs::{
-    parse_current_region, parse_version_info, protocol_crc16, ClientError, CommandCode,
-    HostCommand, ReaderClient, ReaderTransport, RegionCode,
+use rfid_silion_compat::{
+    ClientError, CommandCode, HostCommand, ReaderClient, ReaderTransport, RegionCode,
+    parse_current_region, parse_version_info, protocol_crc16,
 };
 
 #[derive(Debug)]
@@ -61,8 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0x03,
         0x0000,
         &[
-            0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13,
-            0x05, 0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
+            0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13, 0x05,
+            0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
         ],
     );
     let region_reply = build_response(0x67, 0x0000, &[0x01]);
@@ -70,15 +70,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transport = MockTransport::new(vec![version_reply, region_reply]);
     let mut client = ReaderClient::new(transport);
 
-    let version_frame = futures::executor::block_on(client.transact(CommandCode::GetVersion as u8, &[]))
-        .map_err(render_client_error)?;
+    let version_frame =
+        futures::executor::block_on(client.transact(CommandCode::GetVersion as u8, &[]))
+            .map_err(render_client_error)?;
     let version = parse_version_info(&version_frame.data)?;
     println!("Firmware version bytes: {:02X?}", version.firmware_version);
 
-    let region_frame = futures::executor::block_on(
-        client.transact(CommandCode::GetCurrentRegion as u8, &[]),
-    )
-    .map_err(render_client_error)?;
+    let region_frame =
+        futures::executor::block_on(client.transact(CommandCode::GetCurrentRegion as u8, &[]))
+            .map_err(render_client_error)?;
     let region = parse_current_region(&region_frame.data)?;
     assert_eq!(region, RegionCode::NorthAmerica);
     println!("Current region: {region}");

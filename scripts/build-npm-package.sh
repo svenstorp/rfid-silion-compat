@@ -22,7 +22,7 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
-echo "Building npm package for rfidlibrs v$VERSION..."
+echo "Building npm package for rfid-silion-compat v$VERSION..."
 
 # Run wasm-pack to build the bundler target (suitable for Node.js and bundlers)
 wasm-pack build --target bundler --release -- --features web-serial

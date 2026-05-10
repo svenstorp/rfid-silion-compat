@@ -1,4 +1,4 @@
-use crate::async_proto::{subcommand_crc, ASYNC_MARKER, ASYNC_TERMINATOR};
+use crate::async_proto::{ASYNC_MARKER, ASYNC_TERMINATOR, subcommand_crc};
 use crate::codes::{AntennaPortsOption, CommandCode, RegionCode};
 use crate::error::ProtocolError;
 use crate::frame::{build_host_frame, push_u16_be, push_u32_be};
@@ -244,35 +244,67 @@ impl MetadataFlags {
 
     /// Set or clear the Read Count bit (bit 0).
     pub const fn with_read_count(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0001 } else { self.0 & !0x0001 })
+        Self(if en {
+            self.0 | 0x0001
+        } else {
+            self.0 & !0x0001
+        })
     }
     /// Set or clear the RSSI bit (bit 1).
     pub const fn with_rssi(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0002 } else { self.0 & !0x0002 })
+        Self(if en {
+            self.0 | 0x0002
+        } else {
+            self.0 & !0x0002
+        })
     }
     /// Set or clear the Antenna ID bit (bit 2).
     pub const fn with_antenna_id(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0004 } else { self.0 & !0x0004 })
+        Self(if en {
+            self.0 | 0x0004
+        } else {
+            self.0 & !0x0004
+        })
     }
     /// Set or clear the Frequency bit (bit 3).
     pub const fn with_frequency(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0008 } else { self.0 & !0x0008 })
+        Self(if en {
+            self.0 | 0x0008
+        } else {
+            self.0 & !0x0008
+        })
     }
     /// Set or clear the Timestamp bit (bit 4).
     pub const fn with_timestamp(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0010 } else { self.0 & !0x0010 })
+        Self(if en {
+            self.0 | 0x0010
+        } else {
+            self.0 & !0x0010
+        })
     }
     /// Set or clear the RFU reserved bit (bit 5).
     pub const fn with_rfu(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0020 } else { self.0 & !0x0020 })
+        Self(if en {
+            self.0 | 0x0020
+        } else {
+            self.0 & !0x0020
+        })
     }
     /// Set or clear the Protocol ID bit (bit 6).
     pub const fn with_protocol_id(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0040 } else { self.0 & !0x0040 })
+        Self(if en {
+            self.0 | 0x0040
+        } else {
+            self.0 & !0x0040
+        })
     }
     /// Set or clear the Data Length bit (bit 7).
     pub const fn with_data_length(self, en: bool) -> Self {
-        Self(if en { self.0 | 0x0080 } else { self.0 & !0x0080 })
+        Self(if en {
+            self.0 | 0x0080
+        } else {
+            self.0 & !0x0080
+        })
     }
 }
 
@@ -415,7 +447,9 @@ pub struct AsyncInventoryStartData {
 impl AsyncInventoryStartData {
     fn encode(&self) -> Vec<u8> {
         let mut data = Vec::with_capacity(
-            2 + 1 + 2 + if self.access_password.is_some() { 4 } else { 0 }
+            2 + 1
+                + 2
+                + if self.access_password.is_some() { 4 } else { 0 }
                 + self
                     .select_content
                     .as_ref()
@@ -469,7 +503,11 @@ pub enum AntennaPortsConfiguration {
 impl AntennaPortsConfiguration {
     fn encode(&self) -> Result<Vec<u8>, ProtocolError> {
         match self {
-            Self::AccessPair(pair) => Ok(vec![AntennaPortsOption::AccessPair.as_u8(), pair.tx, pair.rx]),
+            Self::AccessPair(pair) => Ok(vec![
+                AntennaPortsOption::AccessPair.as_u8(),
+                pair.tx,
+                pair.rx,
+            ]),
             Self::InventoryPairs(pairs) => {
                 if pairs.is_empty() {
                     return Err(ProtocolError::InvalidArgument(
@@ -530,7 +568,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// let packet = HostCommand::raw(0x03, &[]).unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x00, 0x03, 0x1D, 0x0C]);
@@ -543,14 +581,20 @@ impl HostCommand {
     ///
     /// This bootloader command writes firmware words into flash memory.
     /// `finflag` indicates whether this is the final chunk (`0xFF` means last).
-    pub fn write_flash(finflag: u8, write_addr: u32, write_data: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    pub fn write_flash(
+        finflag: u8,
+        write_addr: u32,
+        write_data: &[u8],
+    ) -> Result<Vec<u8>, ProtocolError> {
         if write_data.is_empty() || (write_data.len() % 4 != 0) {
             return Err(ProtocolError::InvalidArgument(
                 "write_data must be non-empty and a multiple of 4 bytes",
             ));
         }
         if write_data.len() > 128 {
-            return Err(ProtocolError::InvalidArgument("write_data cannot exceed 128 bytes"));
+            return Err(ProtocolError::InvalidArgument(
+                "write_data cannot exceed 128 bytes",
+            ));
         }
         let words = (write_data.len() / 4) as u8;
         let mut data = Vec::with_capacity(1 + 4 + 1 + write_data.len());
@@ -567,7 +611,9 @@ impl HostCommand {
     /// `read_len_words * 4` bytes.
     pub fn read_flash(read_addr: u32, read_len_words: u8) -> Result<Vec<u8>, ProtocolError> {
         if read_len_words > 32 {
-            return Err(ProtocolError::InvalidArgument("read_len_words must be <= 32"));
+            return Err(ProtocolError::InvalidArgument(
+                "read_len_words must be <= 32",
+            ));
         }
         let mut data = Vec::with_capacity(5);
         push_u32_be(&mut data, read_addr);
@@ -582,7 +628,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// let packet = HostCommand::get_version().unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x00, 0x03, 0x1D, 0x0C]);
@@ -605,7 +651,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// // 115200 decimal = 0x0001C200
     /// let packet = HostCommand::set_baud_rate(115_200).unwrap();
@@ -620,7 +666,11 @@ impl HostCommand {
     /// Build command `0x08` (Verify Firmware).
     ///
     /// This is the bootloader verification command used after firmware burn.
-    pub fn verify_firmware(check_addr: u32, check_data_len_words: u32, check_crc: u32) -> Result<Vec<u8>, ProtocolError> {
+    pub fn verify_firmware(
+        check_addr: u32,
+        check_data_len_words: u32,
+        check_crc: u32,
+    ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::with_capacity(12);
         push_u32_be(&mut data, check_addr);
         push_u32_be(&mut data, check_data_len_words);
@@ -641,7 +691,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// let packet = HostCommand::get_run_phase().unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x00, 0x0C, 0x1D, 0x03]);
@@ -661,7 +711,12 @@ impl HostCommand {
     ///
     /// Inventories one tag within `timeout_ms`. Optional metadata and select
     /// filter fields follow the protocol option bits.
-    pub fn single_tag_inventory(timeout_ms: u16, option: u8, metadata_flags: Option<MetadataFlags>, select: Option<SelectContent>) -> Result<Vec<u8>, ProtocolError> {
+    pub fn single_tag_inventory(
+        timeout_ms: u16,
+        option: u8,
+        metadata_flags: Option<MetadataFlags>,
+        select: Option<SelectContent>,
+    ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
         data.push(option);
@@ -752,7 +807,10 @@ impl HostCommand {
     /// Build command `0x29` (Get Tag Buffer).
     ///
     /// Retrieves archived tag EPC/metadata records from synchronous inventory.
-    pub fn get_tag_buffer(metadata_flags: MetadataFlags, option: u8) -> Result<Vec<u8>, ProtocolError> {
+    pub fn get_tag_buffer(
+        metadata_flags: MetadataFlags,
+        option: u8,
+    ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::with_capacity(3);
         push_u16_be(&mut data, metadata_flags.raw());
         data.push(option);
@@ -762,7 +820,14 @@ impl HostCommand {
     /// Build command `0x23` (Write Tag EPC).
     ///
     /// Writes EPC data and lets reader update EPC length bits in PC word.
-    pub fn write_tag_epc(timeout_ms: u16, option: u8, rfu: Option<u8>, access_password: Option<u32>, select: Option<SelectContent>, epc: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    pub fn write_tag_epc(
+        timeout_ms: u16,
+        option: u8,
+        rfu: Option<u8>,
+        access_password: Option<u32>,
+        select: Option<SelectContent>,
+        epc: &[u8],
+    ) -> Result<Vec<u8>, ProtocolError> {
         if epc.is_empty() {
             return Err(ProtocolError::InvalidArgument("epc cannot be empty"));
         }
@@ -800,7 +865,9 @@ impl HostCommand {
             ));
         }
         if write_data.len() > 64 {
-            return Err(ProtocolError::InvalidArgument("write_data must be <= 64 bytes"));
+            return Err(ProtocolError::InvalidArgument(
+                "write_data must be <= 64 bytes",
+            ));
         }
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
@@ -875,7 +942,9 @@ impl HostCommand {
         select: Option<SelectContent>,
     ) -> Result<Vec<u8>, ProtocolError> {
         if word_count == 0 || word_count > 96 {
-            return Err(ProtocolError::InvalidArgument("word_count must be in 1..=96"));
+            return Err(ProtocolError::InvalidArgument(
+                "word_count must be in 1..=96",
+            ));
         }
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
@@ -902,7 +971,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::{AntennaPair, AntennaPortsConfiguration, HostCommand};
+    /// use rfid_silion_compat::{AntennaPair, AntennaPortsConfiguration, HostCommand};
     ///
     /// let packet = HostCommand::set_antenna_ports(&AntennaPortsConfiguration::AccessPair(
     ///     AntennaPair { tx: 0x01, rx: 0x01 },
@@ -945,27 +1014,42 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::{HostCommand, RegionCode};
+    /// use rfid_silion_compat::{HostCommand, RegionCode};
     ///
     /// let packet = HostCommand::set_current_region(RegionCode::NorthAmerica).unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x01, 0x97, 0x01, 0x4B, 0xBC]);
     /// ```
     pub fn set_current_region(region_code: RegionCode) -> Result<Vec<u8>, ProtocolError> {
-        build_host_frame(CommandCode::SetCurrentRegion.as_u8(), &[region_code.as_u8()])
+        build_host_frame(
+            CommandCode::SetCurrentRegion.as_u8(),
+            &[region_code.as_u8()],
+        )
     }
 
     /// Build command `0x9A` (Set Reader Configuration).
     ///
     /// Sets one reader key/value under `option` 0x01 format.
-    pub fn set_reader_configuration(option: u8, key: u8, value: u8) -> Result<Vec<u8>, ProtocolError> {
-        build_host_frame(CommandCode::SetReaderConfiguration.as_u8(), &[option, key, value])
+    pub fn set_reader_configuration(
+        option: u8,
+        key: u8,
+        value: u8,
+    ) -> Result<Vec<u8>, ProtocolError> {
+        build_host_frame(
+            CommandCode::SetReaderConfiguration.as_u8(),
+            &[option, key, value],
+        )
     }
 
     /// Build command `0x9B` (Set Protocol Configuration).
     ///
     /// Sets protocol parameter values (session, target, Q, etc.) according to
     /// option/value presence required by the selected parameter.
-    pub fn set_protocol_configuration(protocol_value: u8, parameter: u8, option: Option<u8>, value: Option<u8>) -> Result<Vec<u8>, ProtocolError> {
+    pub fn set_protocol_configuration(
+        protocol_value: u8,
+        parameter: u8,
+        option: Option<u8>,
+        value: Option<u8>,
+    ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = vec![protocol_value, parameter];
         if let Some(opt) = option {
             data.push(opt);
@@ -998,7 +1082,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// let table_req = HostCommand::get_frequency_hopping(None).unwrap();
     /// assert_eq!(table_req, vec![0xFF, 0x00, 0x65, 0x1D, 0x6A]);
@@ -1047,13 +1131,16 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// // Protocol 0x05 (GEN2), parameter 0x00 (session)
     /// let packet = HostCommand::get_protocol_configuration(0x05, 0x00).unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x02, 0x6B, 0x05, 0x00, 0x3A, 0x6F]);
     /// ```
-    pub fn get_protocol_configuration(protocol_value: u8, parameter: u8) -> Result<Vec<u8>, ProtocolError> {
+    pub fn get_protocol_configuration(
+        protocol_value: u8,
+        parameter: u8,
+    ) -> Result<Vec<u8>, ProtocolError> {
         build_host_frame(
             CommandCode::GetProtocolConfiguration.as_u8(),
             &[protocol_value, parameter],
@@ -1075,7 +1162,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::{
+    /// use rfid_silion_compat::{
     ///     AsyncInventoryStartData, EmbeddedReadTagData, HostCommand,
     ///     InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank,
     ///     MetadataFlags,
@@ -1116,7 +1203,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfidlibrs::HostCommand;
+    /// use rfid_silion_compat::HostCommand;
     ///
     /// let packet = HostCommand::async_stop().unwrap();
     /// assert_eq!(
@@ -1136,7 +1223,10 @@ impl HostCommand {
     /// This inserts the fixed marker (`Moduletech`), subcommand, subcommand
     /// payload, sub-CRC (8-bit sum), and terminator (`0xBB`) before wrapping the
     /// bytes in a normal host frame.
-    pub fn async_inventory(subcommand: AsyncSubcommandCode, subcommand_data: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    pub fn async_inventory(
+        subcommand: AsyncSubcommandCode,
+        subcommand_data: &[u8],
+    ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::with_capacity(10 + 2 + subcommand_data.len() + 2);
         data.extend_from_slice(ASYNC_MARKER);
         push_u16_be(&mut data, subcommand as u16);

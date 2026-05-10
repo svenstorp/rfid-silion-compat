@@ -38,7 +38,10 @@ impl fmt::Display for ProtocolError {
                 write!(f, "length mismatch: declared={declared}, actual={actual}")
             }
             Self::InvalidCrc { expected, actual } => {
-                write!(f, "invalid CRC: expected=0x{expected:04X}, actual=0x{actual:04X}")
+                write!(
+                    f,
+                    "invalid CRC: expected=0x{expected:04X}, actual=0x{actual:04X}"
+                )
             }
             Self::DataTooLong(n) => write!(f, "data length {n} exceeds 255 bytes"),
             Self::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),

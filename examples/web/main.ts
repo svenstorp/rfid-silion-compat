@@ -1,4 +1,4 @@
-import init, { SilionReader, bytesToHex } from "./pkg/rfidlibrs.js";
+import init, { SilionReader, bytesToHex } from "./pkg/rfid_silion_compat.js";
 
 let reader: SilionReader | null = null;
 let inventoryLoopRunning = false;

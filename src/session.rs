@@ -1,9 +1,9 @@
+use crate::ClientError;
 use crate::client::ReaderClient;
 use crate::codes::CommandCode;
 use crate::command::HostCommand;
-use crate::silion_reader::{parse_async_frame_data, AsyncInventoryMessage, SilionReader};
+use crate::silion_reader::{AsyncInventoryMessage, SilionReader, parse_async_frame_data};
 use crate::transport::ReaderTransport;
-use crate::ClientError;
 
 /// An active asynchronous inventory session driven by awaited reads.
 ///
@@ -69,10 +69,10 @@ impl<T: ReaderTransport> AsyncInventorySession<T> {
 mod tests {
     use super::AsyncInventorySession;
     use crate::client::ReaderClient;
-    use crate::command::AsyncSubcommandCode;
     use crate::codes::CommandCode;
-    use crate::test_support::{reply_frame, MockInteraction, MockTransport};
-    use crate::{subcommand_crc, AsyncInventoryMessage, InventorySearchFlags, RegionCode};
+    use crate::command::AsyncSubcommandCode;
+    use crate::test_support::{MockInteraction, MockTransport, reply_frame};
+    use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode, subcommand_crc};
 
     #[test]
     fn recv_heartbeat_message() {
@@ -119,7 +119,8 @@ mod tests {
         let client = ReaderClient::new(transport);
         let session = AsyncInventorySession::new(client);
 
-        let mut reader = futures::executor::block_on(session.stop()).expect("stop should recover reader");
+        let mut reader =
+            futures::executor::block_on(session.stop()).expect("stop should recover reader");
         let region = futures::executor::block_on(reader.get_current_region())
             .expect("recovered reader should work");
         assert_eq!(region, RegionCode::NorthAmerica);

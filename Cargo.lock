@@ -276,7 +276,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rfidlibrs"
+name = "rfid-silion-compat"
 version = "0.1.0"
 dependencies = [
  "futures",

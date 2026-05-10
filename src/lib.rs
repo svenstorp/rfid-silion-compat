@@ -18,7 +18,7 @@
 //!
 //! ### Build A Full Host Packet
 //! ```rust
-//! use rfidlibrs::build_host_frame;
+//! use rfid_silion_compat::build_host_frame;
 //!
 //! // Get Version (0x03) has an empty data field.
 //! let packet = build_host_frame(0x03, &[]).unwrap();
@@ -27,7 +27,7 @@
 //!
 //! ### Parse A Full Reader Packet
 //! ```rust
-//! use rfidlibrs::parse_reader_frame;
+//! use rfid_silion_compat::parse_reader_frame;
 //!
 //! // Reader response for Get Run Phase (0x0C), status=0x0000, data=[0x12].
 //! let packet = [0xFF, 0x01, 0x0C, 0x00, 0x00, 0x12, 0x63, 0x43];
@@ -38,16 +38,16 @@
 //! assert_eq!(frame.data, vec![0x12]);
 //! ```
 
-mod error;
-mod codes;
-mod frame;
-mod command;
 mod async_proto;
-mod parsers;
-mod transport;
 mod client;
-mod silion_reader;
+mod codes;
+mod command;
+mod error;
+mod frame;
+mod parsers;
 mod session;
+mod silion_reader;
+mod transport;
 
 /// Shared mock helpers used by rustdoc examples and unit tests.
 #[doc(hidden)]
@@ -65,31 +65,31 @@ pub mod web_serial;
 /// wasm-bindgen JavaScript bindings for the reader API.
 pub mod web_bindings;
 
-pub use error::ProtocolError;
-pub use codes::{AntennaPortsOption, CommandCode, RegionCode, StatusCode};
-pub use frame::{build_host_frame, parse_reader_frame, protocol_crc16, ReaderFrame};
-pub use command::{
-    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode,
-    EmbeddedReadTagData, HostCommand, InventoryEmbeddedCommandContent,
-    InventoryOption, InventorySearchFlags, MemBank, MetadataFlags, SelectContent,
-};
 pub use async_proto::{
-    parse_async_payload, parse_async_payload_owned, subcommand_crc, AsyncPayload, AsyncPayloadOwned,
-};
-pub use transport::ReaderTransport;
-pub use parsers::{
-    parse_antenna_ports_response, parse_available_regions, parse_current_region,
-    parse_current_tag_protocol, parse_current_temperature, parse_frequency_hopping_table,
-    parse_pin_states, parse_protocol_configuration_value, parse_reader_configuration_value,
-    parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
-    parse_tag_epc_and_meta_data, parse_version_info,
-    AntennaPair, AntennaPortsResponse, AntennaPower, AntennaPowerSettling,
-    ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime, RunPhase,
-    SerialNumberInfo, TagEpcAndMetaData, VersionInfo,
+    AsyncPayload, AsyncPayloadOwned, parse_async_payload, parse_async_payload_owned, subcommand_crc,
 };
 pub use client::{ClientError, ReaderClient};
-pub use silion_reader::{AsyncInventoryMessage, SilionReader};
+pub use codes::{AntennaPortsOption, CommandCode, RegionCode, StatusCode};
+pub use command::{
+    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, EmbeddedReadTagData,
+    HostCommand, InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank,
+    MetadataFlags, SelectContent,
+};
+pub use error::ProtocolError;
+pub use frame::{ReaderFrame, build_host_frame, parse_reader_frame, protocol_crc16};
+pub use parsers::{
+    AntennaPair, AntennaPortsResponse, AntennaPower, AntennaPowerSettling,
+    ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime, RunPhase,
+    SerialNumberInfo, TagEpcAndMetaData, VersionInfo, parse_antenna_ports_response,
+    parse_available_regions, parse_current_region, parse_current_tag_protocol,
+    parse_current_temperature, parse_frequency_hopping_table, parse_pin_states,
+    parse_protocol_configuration_value, parse_reader_configuration_value,
+    parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
+    parse_tag_epc_and_meta_data, parse_version_info,
+};
 pub use session::AsyncInventorySession;
+pub use silion_reader::{AsyncInventoryMessage, SilionReader};
+pub use transport::ReaderTransport;
 
 #[cfg(test)]
 mod tests {
@@ -127,10 +127,12 @@ mod tests {
 
     #[test]
     fn build_set_antenna_access_pair_packet() {
-        let p = HostCommand::set_antenna_ports(&AntennaPortsConfiguration::AccessPair(
-            AntennaPair { tx: 0x01, rx: 0x01 },
-        ))
-        .unwrap();
+        let p =
+            HostCommand::set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
+                tx: 0x01,
+                rx: 0x01,
+            }))
+            .unwrap();
         assert_eq!(p, vec![0xFF, 0x03, 0x91, 0x00, 0x01, 0x01, 0x62, 0x87]);
     }
 
@@ -140,8 +142,8 @@ mod tests {
         assert_eq!(
             p,
             vec![
-                0xFF, 0x0E, 0xAA, 0x4D, 0x6F, 0x64, 0x75, 0x6C, 0x65, 0x74, 0x65, 0x63, 0x68,
-                0xAA, 0x49, 0xF3, 0xBB, 0x03, 0x91,
+                0xFF, 0x0E, 0xAA, 0x4D, 0x6F, 0x64, 0x75, 0x6C, 0x65, 0x74, 0x65, 0x63, 0x68, 0xAA,
+                0x49, 0xF3, 0xBB, 0x03, 0x91,
             ]
         );
     }
@@ -149,8 +151,8 @@ mod tests {
     #[test]
     fn parse_version_info_ok() {
         let data = [
-            0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13,
-            0x05, 0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
+            0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13, 0x05,
+            0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
         ];
         let v = parse_version_info(&data).unwrap();
         assert_eq!(v.supported_protocol, [0x00, 0x00, 0x00, 0x10]);
@@ -236,8 +238,8 @@ mod tests {
             CommandCode::GetVersion as u8,
             0x0000,
             &[
-                0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13,
-                0x05, 0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
+                0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13, 0x05,
+                0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
             ],
         );
         let region = frame(CommandCode::GetCurrentRegion as u8, 0x0000, &[0x01]);

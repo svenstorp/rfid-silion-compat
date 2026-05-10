@@ -1,4 +1,3 @@
-
 use crate::error::ProtocolError;
 
 pub(crate) const ASYNC_MARKER: &[u8; 10] = b"Moduletech";

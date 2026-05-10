@@ -2,18 +2,18 @@ use crate::async_proto::parse_async_payload_owned;
 use crate::client::{ClientError, ReaderClient};
 use crate::codes::{AntennaPortsOption, CommandCode, RegionCode};
 use crate::command::{
-    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode,
-    InventorySearchFlags, MetadataFlags,
+    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, InventorySearchFlags,
+    MetadataFlags,
 };
 use crate::error::ProtocolError;
 use crate::parsers::{
-    parse_antenna_ports_response, parse_available_regions, parse_current_region,
-    parse_current_tag_protocol, parse_current_temperature, parse_frequency_hopping_table,
-    parse_pin_states, parse_protocol_configuration_value, parse_reader_configuration_value,
+    AntennaPortsResponse, ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime,
+    RunPhase, SerialNumberInfo, TagEpcAndMetaData, VersionInfo, parse_antenna_ports_response,
+    parse_available_regions, parse_current_region, parse_current_tag_protocol,
+    parse_current_temperature, parse_frequency_hopping_table, parse_pin_states,
+    parse_protocol_configuration_value, parse_reader_configuration_value,
     parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
-    parse_tag_epc_and_meta_data, parse_version_info, AntennaPortsResponse,
-    ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime, RunPhase,
-    SerialNumberInfo, TagEpcAndMetaData, VersionInfo,
+    parse_tag_epc_and_meta_data, parse_version_info,
 };
 use crate::session::AsyncInventorySession;
 use crate::transport::ReaderTransport;
@@ -102,13 +102,19 @@ impl<T: ReaderTransport> SilionReader<T> {
 
     /// Run command `0x03` (Get Version) and parse version fields.
     pub async fn get_version(&mut self) -> Result<VersionInfo, ClientError<T::Error>> {
-        let frame = self.client.transact(CommandCode::GetVersion as u8, &[]).await?;
+        let frame = self
+            .client
+            .transact(CommandCode::GetVersion as u8, &[])
+            .await?;
         parse_version_info(&frame.data).map_err(ClientError::Protocol)
     }
 
     /// Run command `0x04` (Boot Firmware).
     pub async fn boot_firmware(&mut self) -> Result<(), ClientError<T::Error>> {
-        let _ = self.client.transact(CommandCode::BootFirmware as u8, &[]).await?;
+        let _ = self
+            .client
+            .transact(CommandCode::BootFirmware as u8, &[])
+            .await?;
         Ok(())
     }
 
@@ -123,7 +129,10 @@ impl<T: ReaderTransport> SilionReader<T> {
 
     /// Run command `0x0C` (Get Run Phase) and parse phase enum.
     pub async fn get_run_phase(&mut self) -> Result<RunPhase, ClientError<T::Error>> {
-        let frame = self.client.transact(CommandCode::GetRunPhase as u8, &[]).await?;
+        let frame = self
+            .client
+            .transact(CommandCode::GetRunPhase as u8, &[])
+            .await?;
         parse_run_phase(&frame.data).map_err(ClientError::Protocol)
     }
 
@@ -218,8 +227,8 @@ impl<T: ReaderTransport> SilionReader<T> {
         &mut self,
         start: &AsyncInventoryStartData,
     ) -> Result<(), ClientError<T::Error>> {
-        let packet = crate::command::HostCommand::async_start(start)
-            .map_err(ClientError::Protocol)?;
+        let packet =
+            crate::command::HostCommand::async_start(start).map_err(ClientError::Protocol)?;
         let response = self.client.transact_frame(&packet).await?;
         if response.command != CommandCode::AsynchronousInventory as u8 {
             return Err(ClientError::UnexpectedResponseCommand {
@@ -276,9 +285,7 @@ impl<T: ReaderTransport> SilionReader<T> {
     }
 
     /// Run command `0x65` (Get Frequency Hopping table form).
-    pub async fn get_frequency_hopping_table(
-        &mut self,
-    ) -> Result<Vec<u32>, ClientError<T::Error>> {
+    pub async fn get_frequency_hopping_table(&mut self) -> Result<Vec<u32>, ClientError<T::Error>> {
         let frame = self
             .client
             .transact(CommandCode::GetFrequencyHopping as u8, &[])
@@ -356,7 +363,9 @@ pub(crate) fn parse_async_frame_data(data: &[u8]) -> Result<AsyncInventoryMessag
 
     if data.starts_with(b"XTSJ") {
         if data.len() < 6 {
-            return Err(ProtocolError::InvalidResponse("heartbeat payload too short"));
+            return Err(ProtocolError::InvalidResponse(
+                "heartbeat payload too short",
+            ));
         }
         let search_flags = InventorySearchFlags::from_raw(u16::from_be_bytes([data[4], data[5]]));
         return Ok(AsyncInventoryMessage::Heartbeat {
@@ -383,14 +392,14 @@ pub(crate) fn parse_async_frame_data(data: &[u8]) -> Result<AsyncInventoryMessag
 mod tests {
     use super::SilionReader;
     use crate::codes::CommandCode;
-    use crate::test_support::{reply_frame, MockInteraction, MockTransport};
+    use crate::test_support::{MockInteraction, MockTransport, reply_frame};
     use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode};
 
     #[test]
     fn get_version_and_region() {
         let version_data = vec![
-            0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13,
-            0x05, 0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
+            0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01, 0x20, 0x13, 0x05, 0x22, 0x13, 0x05,
+            0x23, 0x00, 0x00, 0x00, 0x00, 0x10,
         ];
         let transport = MockTransport::scripted(vec![
             MockInteraction {
@@ -406,11 +415,12 @@ mod tests {
         ]);
 
         let mut reader = SilionReader::new(transport);
-        let version = futures::executor::block_on(reader.get_version()).expect("version should parse");
+        let version =
+            futures::executor::block_on(reader.get_version()).expect("version should parse");
         assert_eq!(version.supported_protocol, [0x00, 0x00, 0x00, 0x10]);
 
-        let region = futures::executor::block_on(reader.get_current_region())
-            .expect("region should parse");
+        let region =
+            futures::executor::block_on(reader.get_current_region()).expect("region should parse");
         assert_eq!(region, RegionCode::NorthAmerica);
     }
 
@@ -441,8 +451,8 @@ mod tests {
     #[test]
     #[cfg(feature = "web-serial")]
     fn tag_information_serialization() {
-        use crate::parsers::TagEpcAndMetaData;
         use crate::command::MetadataFlags;
+        use crate::parsers::TagEpcAndMetaData;
 
         let tag = TagEpcAndMetaData {
             read_count: Some(1),
@@ -470,24 +480,55 @@ mod tests {
             serde_json::from_str(&json_str).expect("should parse JSON");
 
         // Check that the message has the expected kind
-        assert_eq!(json_value.get("kind").and_then(|v| v.as_str()), Some("tagInformation"));
+        assert_eq!(
+            json_value.get("kind").and_then(|v| v.as_str()),
+            Some("tagInformation")
+        );
 
         // With no `flatten`, tag data must be nested under `tag`.
         let tag_obj = json_value
             .get("tag")
             .and_then(|v| v.as_object())
             .expect("tag should be an object");
-        assert!(tag_obj.get("epcId").is_some(), "tag.epcId should be present");
-        assert!(tag_obj.get("readCount").is_some(), "tag.readCount should be present");
-        assert!(tag_obj.get("rssiDbm").is_some(), "tag.rssiDbm should be present");
-        assert!(tag_obj.get("antennaId").is_some(), "tag.antennaId should be present");
-        assert!(tag_obj.get("frequencyKhz").is_some(), "tag.frequencyKhz should be present");
-        assert!(tag_obj.get("timestampMs").is_some(), "tag.timestampMs should be present");
-        assert!(tag_obj.get("protocolId").is_some(), "tag.protocolId should be present");
-        assert!(tag_obj.get("epcBitLength").is_some(), "tag.epcBitLength should be present");
-        assert!(tag_obj.get("pcWord").is_some(), "tag.pcWord should be present");
-        assert!(tag_obj.get("tagCrc").is_some(), "tag.tagCrc should be present");
-
+        assert!(
+            tag_obj.get("epcId").is_some(),
+            "tag.epcId should be present"
+        );
+        assert!(
+            tag_obj.get("readCount").is_some(),
+            "tag.readCount should be present"
+        );
+        assert!(
+            tag_obj.get("rssiDbm").is_some(),
+            "tag.rssiDbm should be present"
+        );
+        assert!(
+            tag_obj.get("antennaId").is_some(),
+            "tag.antennaId should be present"
+        );
+        assert!(
+            tag_obj.get("frequencyKhz").is_some(),
+            "tag.frequencyKhz should be present"
+        );
+        assert!(
+            tag_obj.get("timestampMs").is_some(),
+            "tag.timestampMs should be present"
+        );
+        assert!(
+            tag_obj.get("protocolId").is_some(),
+            "tag.protocolId should be present"
+        );
+        assert!(
+            tag_obj.get("epcBitLength").is_some(),
+            "tag.epcBitLength should be present"
+        );
+        assert!(
+            tag_obj.get("pcWord").is_some(),
+            "tag.pcWord should be present"
+        );
+        assert!(
+            tag_obj.get("tagCrc").is_some(),
+            "tag.tagCrc should be present"
+        );
     }
-
 }

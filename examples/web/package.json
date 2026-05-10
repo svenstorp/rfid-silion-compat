@@ -1,7 +1,7 @@
 {
-  "name": "rfidlibrs-web-example",
+  "name": "rfid-silion-compat-web-example",
   "version": "0.1.0",
-  "description": "Browser example for rfidlibrs RFID library",
+  "description": "Browser example for rfid-silion-compat RFID library",
   "scripts": {
     "check": "tsc --noEmit",
     "clean": "rm -rf dist pkg",

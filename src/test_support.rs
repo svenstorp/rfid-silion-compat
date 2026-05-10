@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::{protocol_crc16, ReaderTransport};
+use crate::{ReaderTransport, protocol_crc16};
 
 /// One scripted request/response interaction for [`MockTransport`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +56,11 @@ impl ReaderTransport for MockTransport {
             if data[2] != next.request_command {
                 return Err("unexpected request command");
             }
-            let reply = reply_frame(next.request_command, next.response_status, &next.response_data);
+            let reply = reply_frame(
+                next.request_command,
+                next.response_status,
+                &next.response_data,
+            );
             self.rx.extend(reply);
         }
         Ok(())

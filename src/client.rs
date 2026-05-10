@@ -2,7 +2,7 @@ use core::fmt;
 
 use crate::codes::StatusCode;
 use crate::error::ProtocolError;
-use crate::frame::{build_host_frame, parse_reader_frame, ReaderFrame};
+use crate::frame::{ReaderFrame, build_host_frame, parse_reader_frame};
 use crate::transport::ReaderTransport;
 
 /// Errors produced by the protocol client.
@@ -37,7 +37,10 @@ impl<TE: fmt::Display> fmt::Display for ClientError<TE> {
                 write!(f, "reader returned status 0x{status_raw:04X} ({status:?})")
             }
             Self::UnexpectedResponseCommand { expected, actual } => {
-                write!(f, "unexpected response command: expected 0x{expected:02X}, got 0x{actual:02X}")
+                write!(
+                    f,
+                    "unexpected response command: expected 0x{expected:02X}, got 0x{actual:02X}"
+                )
             }
         }
     }
@@ -151,8 +154,9 @@ mod tests {
         }]);
 
         let mut client = ReaderClient::new(transport);
-        let frame = futures::executor::block_on(client.transact(CommandCode::GetCurrentRegion as u8, &[]))
-            .expect("transact should succeed");
+        let frame =
+            futures::executor::block_on(client.transact(CommandCode::GetCurrentRegion as u8, &[]))
+                .expect("transact should succeed");
         assert_eq!(frame.command, CommandCode::GetCurrentRegion as u8);
         assert_eq!(frame.data, vec![0x01]);
     }
@@ -166,8 +170,9 @@ mod tests {
         }]);
 
         let mut client = ReaderClient::new(transport);
-        let err = futures::executor::block_on(client.transact(CommandCode::GetCurrentRegion as u8, &[]))
-            .expect_err("transact should fail with reader status");
+        let err =
+            futures::executor::block_on(client.transact(CommandCode::GetCurrentRegion as u8, &[]))
+                .expect_err("transact should fail with reader status");
 
         match err {
             ClientError::ReaderStatus { status_raw, .. } => assert_eq!(status_raw, 0x010B),
