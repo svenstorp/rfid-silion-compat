@@ -1,0 +1,11 @@
+[package]
+name = "rfidlibrs"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+serialport = ["dep:serialport"]
+
+[dependencies]
+serialport = { version = "4.7.3", optional = true, default-features = false }
