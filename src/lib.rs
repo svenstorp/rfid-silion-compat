@@ -46,7 +46,7 @@ mod async_proto;
 mod parsers;
 mod transport;
 mod client;
-mod host;
+mod silion_reader;
 mod session;
 
 /// Shared mock helpers used by rustdoc examples and unit tests.
@@ -62,7 +62,7 @@ pub mod serial;
 pub mod web_serial;
 
 #[cfg(all(target_arch = "wasm32", feature = "web-serial"))]
-/// wasm-bindgen JavaScript bindings for the host API.
+/// wasm-bindgen JavaScript bindings for the reader API.
 pub mod web_bindings;
 
 pub use error::ProtocolError;
@@ -88,7 +88,7 @@ pub use parsers::{
     SerialNumberInfo, TagEpcAndMetaData, VersionInfo,
 };
 pub use client::{ClientError, ReaderClient};
-pub use host::{AsyncInventoryMessage, SilionHost};
+pub use silion_reader::{AsyncInventoryMessage, SilionReader};
 pub use session::AsyncInventorySession;
 
 #[cfg(test)]
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn silion_host_get_version_and_region() {
+    fn silion_reader_get_version_and_region() {
         let version = frame(
             CommandCode::GetVersion as u8,
             0x0000,
@@ -243,11 +243,11 @@ mod tests {
         let region = frame(CommandCode::GetCurrentRegion as u8, 0x0000, &[0x01]);
 
         let transport = TestTransport::from_frames(vec![version, region]);
-        let mut host = SilionHost::new(transport);
+        let mut reader = SilionReader::new(transport);
 
-        let v = futures::executor::block_on(host.get_version()).unwrap();
+        let v = futures::executor::block_on(reader.get_version()).unwrap();
         assert_eq!(v.supported_protocol, [0, 0, 0, 0x10]);
-        let r = futures::executor::block_on(host.get_current_region()).unwrap();
+        let r = futures::executor::block_on(reader.get_current_region()).unwrap();
         assert_eq!(r, RegionCode::NorthAmerica);
     }
 }

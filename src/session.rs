@@ -1,16 +1,16 @@
 use crate::client::ReaderClient;
 use crate::codes::CommandCode;
 use crate::command::HostCommand;
-use crate::host::{parse_async_frame_data, AsyncInventoryMessage, SilionHost};
+use crate::silion_reader::{parse_async_frame_data, AsyncInventoryMessage, SilionReader};
 use crate::transport::ReaderTransport;
 use crate::ClientError;
 
 /// An active asynchronous inventory session driven by awaited reads.
 ///
-/// Created by [`SilionHost::into_async_session`]. The transport is moved into
+/// Created by [`SilionReader::into_async_session`]. The transport is moved into
 /// this session for the duration of asynchronous inventory, and no other
 /// commands can be sent until [`stop`][Self::stop] is called and the transport
-/// is recovered as a [`SilionHost`].
+/// is recovered as a [`SilionReader`].
 pub struct AsyncInventorySession<T: ReaderTransport> {
     client: ReaderClient<T>,
 }
@@ -38,8 +38,8 @@ impl<T: ReaderTransport> AsyncInventorySession<T> {
         parse_async_frame_data(&frame.data).map_err(ClientError::Protocol)
     }
 
-    /// Send `0xAA49`, wait for `StopAck`, and recover the host.
-    pub async fn stop(mut self) -> Result<SilionHost<T>, ClientError<T::Error>> {
+    /// Send `0xAA49`, wait for `StopAck`, and recover the reader.
+    pub async fn stop(mut self) -> Result<SilionReader<T>, ClientError<T::Error>> {
         let stop_packet = HostCommand::async_stop().map_err(ClientError::Protocol)?;
         self.client.write_frame(&stop_packet).await?;
 
@@ -50,7 +50,7 @@ impl<T: ReaderTransport> AsyncInventorySession<T> {
             }
         }
 
-        Ok(SilionHost::from_client(self.client))
+        Ok(SilionReader::from_client(self.client))
     }
 
     /// Send `0xAA49` and recover the host without waiting for `StopAck`.
@@ -58,10 +58,10 @@ impl<T: ReaderTransport> AsyncInventorySession<T> {
     /// This is useful for environments where an in-flight async receive was
     /// canceled and waiting for the acknowledgement could otherwise block
     /// indefinitely.
-    pub async fn stop_no_wait(mut self) -> Result<SilionHost<T>, ClientError<T::Error>> {
+    pub async fn stop_no_wait(mut self) -> Result<SilionReader<T>, ClientError<T::Error>> {
         let stop_packet = HostCommand::async_stop().map_err(ClientError::Protocol)?;
         self.client.write_frame(&stop_packet).await?;
-        Ok(SilionHost::from_client(self.client))
+        Ok(SilionReader::from_client(self.client))
     }
 }
 
@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_recovers_host() {
+    fn stop_recovers_reader() {
         let mut stop_ack = b"Moduletech".to_vec();
         stop_ack.extend_from_slice(&(AsyncSubcommandCode::Stop as u16).to_be_bytes());
         stop_ack.push(subcommand_crc(AsyncSubcommandCode::Stop as u16, &[]));
@@ -119,9 +119,9 @@ mod tests {
         let client = ReaderClient::new(transport);
         let session = AsyncInventorySession::new(client);
 
-        let mut host = futures::executor::block_on(session.stop()).expect("stop should recover host");
-        let region = futures::executor::block_on(host.get_current_region())
-            .expect("recovered host should work");
+        let mut reader = futures::executor::block_on(session.stop()).expect("stop should recover reader");
+        let region = futures::executor::block_on(reader.get_current_region())
+            .expect("recovered reader should work");
         assert_eq!(region, RegionCode::NorthAmerica);
     }
 }

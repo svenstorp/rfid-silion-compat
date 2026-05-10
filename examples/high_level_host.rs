@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use rfidlibrs::{protocol_crc16, CommandCode, ReaderTransport, SilionHost};
+use rfidlibrs::{protocol_crc16, CommandCode, ReaderTransport, SilionReader};
 
 #[derive(Debug)]
 struct MockTransport {
@@ -60,15 +60,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let temp = mk_frame(CommandCode::GetCurrentTemperature as u8, 0x0000, &[0x27]);
 
     let transport = MockTransport::from_frames(vec![version, region, temp]);
-    let mut host = SilionHost::new(transport);
+    let mut reader = SilionReader::new(transport);
 
-    let v = futures::executor::block_on(host.get_version())?;
+    let v = futures::executor::block_on(reader.get_version())?;
     println!("FW version bytes: {:02X?}", v.firmware_version);
 
-    let region = futures::executor::block_on(host.get_current_region())?;
+    let region = futures::executor::block_on(reader.get_current_region())?;
     println!("Region: {region}");
 
-    let temperature = futures::executor::block_on(host.get_current_temperature())?;
+    let temperature = futures::executor::block_on(reader.get_current_temperature())?;
     println!("Temperature: {temperature}C");
 
     Ok(())

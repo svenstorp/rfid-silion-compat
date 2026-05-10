@@ -18,8 +18,8 @@ use crate::parsers::{
 use crate::session::AsyncInventorySession;
 use crate::transport::ReaderTransport;
 
-/// High-level host API that returns typed values for common protocol operations.
-pub struct SilionHost<T: ReaderTransport> {
+/// High-level reader API that returns typed values for common protocol operations.
+pub struct SilionReader<T: ReaderTransport> {
     client: ReaderClient<T>,
 }
 
@@ -55,20 +55,20 @@ pub enum AsyncInventoryMessage {
     },
 }
 
-impl<T: ReaderTransport> SilionHost<T> {
-    /// Create a high-level host API from a transport.
+impl<T: ReaderTransport> SilionReader<T> {
+    /// Create a high-level reader API from a transport.
     pub fn new(transport: T) -> Self {
         Self {
             client: ReaderClient::new(transport),
         }
     }
 
-    /// Create a high-level host API from an existing low-level client.
+    /// Create a high-level reader API from an existing low-level client.
     pub fn from_client(client: ReaderClient<T>) -> Self {
         Self { client }
     }
 
-    /// Consume the host API and return the wrapped transport.
+    /// Consume the reader API and return the wrapped transport.
     pub fn into_inner(self) -> T {
         self.client.into_inner()
     }
@@ -78,7 +78,7 @@ impl<T: ReaderTransport> SilionHost<T> {
         self.client.transport_mut()
     }
 
-    /// Consume the host API and return the wrapped low-level client.
+    /// Consume the reader API and return the wrapped low-level client.
     pub fn into_client(self) -> ReaderClient<T> {
         self.client
     }
@@ -86,7 +86,7 @@ impl<T: ReaderTransport> SilionHost<T> {
     /// Run a raw command transaction and return the validated response frame.
     ///
     /// This is useful for callers that need command coverage beyond the typed
-    /// helper methods on `SilionHost`.
+    /// helper methods on `SilionReader`.
     pub async fn transact_raw(
         &mut self,
         command: u8,
@@ -381,7 +381,7 @@ pub(crate) fn parse_async_frame_data(data: &[u8]) -> Result<AsyncInventoryMessag
 
 #[cfg(test)]
 mod tests {
-    use super::SilionHost;
+    use super::SilionReader;
     use crate::codes::CommandCode;
     use crate::test_support::{reply_frame, MockInteraction, MockTransport};
     use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode};
@@ -405,11 +405,11 @@ mod tests {
             },
         ]);
 
-        let mut host = SilionHost::new(transport);
-        let version = futures::executor::block_on(host.get_version()).expect("version should parse");
+        let mut reader = SilionReader::new(transport);
+        let version = futures::executor::block_on(reader.get_version()).expect("version should parse");
         assert_eq!(version.supported_protocol, [0x00, 0x00, 0x00, 0x10]);
 
-        let region = futures::executor::block_on(host.get_current_region())
+        let region = futures::executor::block_on(reader.get_current_region())
             .expect("region should parse");
         assert_eq!(region, RegionCode::NorthAmerica);
     }
@@ -422,8 +422,8 @@ mod tests {
         let packet = reply_frame(0xAA, 0x0000, &data);
         let transport = MockTransport::from_replies(vec![packet]);
 
-        let mut host = SilionHost::new(transport);
-        let message = futures::executor::block_on(host.recv_async_inventory_message())
+        let mut reader = SilionReader::new(transport);
+        let message = futures::executor::block_on(reader.recv_async_inventory_message())
             .expect("async message should parse");
 
         match message {

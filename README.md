@@ -1,11 +1,11 @@
 # rfidlibrs
 
-Async Rust host library for Silion RFID reader protocol communication.
+Async Rust reader library for Silion RFID reader protocol communication.
 
 This crate provides:
 - Low-level packet build/parse helpers
 - A transport-agnostic async client
-- A high-level host API (`SilionHost`) for common reader operations
+- A high-level reader API (`SilionReader`) for common reader operations
 - Async inventory session support
 - Optional native serial transport (`tokio-serial`)
 - Optional browser Web Serial + wasm-bindgen JS bindings
@@ -57,7 +57,7 @@ cargo add rfidlibrs --features serial
 cargo run --example build_packets
 ```
 
-### High-level host API with mock transport
+### High-level reader API with mock transport
 
 ```bash
 cargo run --example high_level_host
@@ -73,17 +73,17 @@ cargo run --features serial --example serial_query -- /dev/ttyUSB0 115200
 
 ```rust
 use rfidlibrs::serial::SerialTransport;
-use rfidlibrs::SilionHost;
+use rfidlibrs::SilionReader;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let transport = SerialTransport::open("/dev/ttyUSB0", 115_200)?;
-	let mut host = SilionHost::new(transport);
+	let mut reader = SilionReader::new(transport);
 
-	let version = host.get_version().await?;
+	let version = reader.get_version().await?;
 	println!("Firmware: {:02X?}", version.firmware_version);
 
-	let temperature = host.get_current_temperature().await?;
+	let temperature = reader.get_current_temperature().await?;
 	println!("Temperature: {temperature} C");
 
 	Ok(())
@@ -142,7 +142,7 @@ cargo check --target wasm32-unknown-unknown --features web-serial
 ## Project Layout
 
 - [src/lib.rs](src/lib.rs): exports and crate-level docs
-- [src/host.rs](src/host.rs): high-level async host API
+- [src/reader.rs](src/reader.rs): high-level async reader API
 - [src/client.rs](src/client.rs): transport-level async client
 - [src/session.rs](src/session.rs): async inventory session API
 - [src/serial.rs](src/serial.rs): native serial transport (`serial` feature)

@@ -6,7 +6,7 @@ use rfidlibrs::{
     AntennaPower,
     AsyncInventoryMessage, AsyncInventoryStartData, EmbeddedReadTagData,
     InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MetadataFlags,
-    MemBank, SilionHost,
+    MemBank, SilionReader,
 };
 #[cfg(feature = "serial")]
 use std::env;
@@ -24,9 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(115_200);
 
     let transport = SerialTransport::open(&port, baud)?;
-    let mut host = SilionHost::new(transport);
+    let mut reader = SilionReader::new(transport);
 
-    let version = host.get_version().await?;
+    let version = reader.get_version().await?;
     println!(
         "Firmware version: {:02X?}, date: {:02X?}",
         version.firmware_version, version.firmware_date
@@ -34,32 +34,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Bootloader version: {:02X?}", version.bootloader_version);
     println!("Hardware Version: {:02X?}", version.hardware_version);
 
-    let serial_number = host.get_serial_number(0x00, 0x00).await?;
+    let serial_number = reader.get_serial_number(0x00, 0x00).await?;
     println!(
         "Serial number year: {:02X?}, bytes: {:02X?}",
         serial_number.year, serial_number.serial_number
     );
 
-    let phase = host.get_run_phase().await?;
+    let phase = reader.get_run_phase().await?;
     println!("Run phase: {phase:?}");
 
     if phase == rfidlibrs::RunPhase::Bootloader {
-        host.boot_firmware().await?;
+        reader.boot_firmware().await?;
     }
 
-    let region = host.get_current_region().await?;
+    let region = reader.get_current_region().await?;
     println!("Current region: {region}");
 
     if region != rfidlibrs::RegionCode::Europe {
-        host.set_current_region(rfidlibrs::RegionCode::Europe).await?;
+        reader.set_current_region(rfidlibrs::RegionCode::Europe).await?;
     }
 
     println!("Reading current antenna configuration...");
-    let current_access = host.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
-    let current_inventory = host
+    let current_access = reader.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
+    let current_inventory = reader
         .get_antenna_ports(AntennaPortsOption::InventoryPairs)
         .await?;
-    let current_power = host.get_antenna_ports(AntennaPortsOption::Power).await?;
+    let current_power = reader.get_antenna_ports(AntennaPortsOption::Power).await?;
 
     if let AntennaPortsResponse::AccessPair(pair) = current_access {
         println!("Current access pair: tx={} rx={}", pair.tx, pair.rx);
@@ -75,28 +75,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const LOW_POWER_DBM_X100: u16 = 100;
 
     println!("Configuring antenna 1 only with low power...");
-    host.set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
+    reader.set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
         tx: 0x01,
         rx: 0x01,
     }))
     .await?;
-    host.set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(vec![AntennaPair {
+    reader.set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(vec![AntennaPair {
         tx: 0x01,
         rx: 0x01,
     }]))
     .await?;
-    host.set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
+    reader.set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
         tx: 0x01,
         read_power: LOW_POWER_DBM_X100,
         write_power: LOW_POWER_DBM_X100,
     }]))
     .await?;
 
-    let updated_access = host.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
-    let updated_inventory = host
+    let updated_access = reader.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
+    let updated_inventory = reader
         .get_antenna_ports(AntennaPortsOption::InventoryPairs)
         .await?;
-    let updated_power = host.get_antenna_ports(AntennaPortsOption::Power).await?;
+    let updated_power = reader.get_antenna_ports(AntennaPortsOption::Power).await?;
 
     if let AntennaPortsResponse::AccessPair(pair) = updated_access {
         println!("Updated access pair: tx={} rx={}", pair.tx, pair.rx);
@@ -139,9 +139,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Starting async inventory (2 minutes, heartbeats enabled)…");
-    host.enable_async_inventory(&start_data).await?;
+    reader.enable_async_inventory(&start_data).await?;
 
-    let mut session = host.into_async_session();
+    let mut session = reader.into_async_session();
 
     let deadline = Instant::now() + Duration::from_secs(120);
 
@@ -194,10 +194,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut host = session.stop().await?;
+    let mut reader = session.stop().await?;
 
     println!("Resetting module to bootloader mode…");
-    host.boot_bootloader().await?;
+    reader.boot_bootloader().await?;
 
     Ok(())
 }
