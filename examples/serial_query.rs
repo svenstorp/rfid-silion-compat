@@ -1,18 +1,21 @@
-#[cfg(feature = "serialport")]
-use rfidlibrs::serial::SerialPortTransport;
-#[cfg(feature = "serialport")]
+#[cfg(feature = "serial")]
+use rfidlibrs::serial::SerialTransport;
+#[cfg(feature = "serial")]
 use rfidlibrs::{
+    AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPortsResponse,
+    AntennaPower,
     AsyncInventoryMessage, AsyncInventoryStartData, EmbeddedReadTagData,
     InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MetadataFlags,
     MemBank, SilionHost,
 };
-#[cfg(feature = "serialport")]
+#[cfg(feature = "serial")]
 use std::env;
-#[cfg(feature = "serialport")]
-use std::time::Duration;
+#[cfg(feature = "serial")]
+use std::time::{Duration, Instant};
 
-#[cfg(feature = "serialport")]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "serial")]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let port = args.next().unwrap_or_else(|| "/dev/ttyUSB0".to_string());
     let baud = args
@@ -20,10 +23,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(115_200);
 
-    let transport = SerialPortTransport::open(&port, baud, Duration::from_millis(500))?;
+    let transport = SerialTransport::open(&port, baud)?;
     let mut host = SilionHost::new(transport);
 
-    let version = host.get_version()?;
+    let version = host.get_version().await?;
     println!(
         "Firmware version: {:02X?}, date: {:02X?}",
         version.firmware_version, version.firmware_date
@@ -31,24 +34,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Bootloader version: {:02X?}", version.bootloader_version);
     println!("Hardware Version: {:02X?}", version.hardware_version);
 
-    let serial_number = host.get_serial_number(0x00, 0x00)?;
+    let serial_number = host.get_serial_number(0x00, 0x00).await?;
     println!(
         "Serial number year: {:02X?}, bytes: {:02X?}",
         serial_number.year, serial_number.serial_number
     );
 
-    let phase = host.get_run_phase()?;
+    let phase = host.get_run_phase().await?;
     println!("Run phase: {phase:?}");
 
     if phase == rfidlibrs::RunPhase::Bootloader {
-        host.boot_firmware()?;
+        host.boot_firmware().await?;
     }
 
-    let region = host.get_current_region()?;
+    let region = host.get_current_region().await?;
     println!("Current region: {region}");
 
     if region != rfidlibrs::RegionCode::Europe {
-        host.set_current_region(rfidlibrs::RegionCode::Europe)?;
+        host.set_current_region(rfidlibrs::RegionCode::Europe).await?;
+    }
+
+    println!("Reading current antenna configuration...");
+    let current_access = host.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
+    let current_inventory = host
+        .get_antenna_ports(AntennaPortsOption::InventoryPairs)
+        .await?;
+    let current_power = host.get_antenna_ports(AntennaPortsOption::Power).await?;
+
+    if let AntennaPortsResponse::AccessPair(pair) = current_access {
+        println!("Current access pair: tx={} rx={}", pair.tx, pair.rx);
+    }
+    if let AntennaPortsResponse::InventoryPairs(pairs) = current_inventory {
+        println!("Current inventory pairs: {pairs:?}");
+    }
+    if let AntennaPortsResponse::Power(entries) = current_power {
+        println!("Current antenna power entries (0.01 dBm): {entries:?}");
+    }
+
+    // Protocol power units are 0.01 dBm. This selects a deliberately low level.
+    const LOW_POWER_DBM_X100: u16 = 100;
+
+    println!("Configuring antenna 1 only with low power...");
+    host.set_antenna_ports(&AntennaPortsConfiguration::AccessPair(AntennaPair {
+        tx: 0x01,
+        rx: 0x01,
+    }))
+    .await?;
+    host.set_antenna_ports(&AntennaPortsConfiguration::InventoryPairs(vec![AntennaPair {
+        tx: 0x01,
+        rx: 0x01,
+    }]))
+    .await?;
+    host.set_antenna_ports(&AntennaPortsConfiguration::Power(vec![AntennaPower {
+        tx: 0x01,
+        read_power: LOW_POWER_DBM_X100,
+        write_power: LOW_POWER_DBM_X100,
+    }]))
+    .await?;
+
+    let updated_access = host.get_antenna_ports(AntennaPortsOption::AccessPair).await?;
+    let updated_inventory = host
+        .get_antenna_ports(AntennaPortsOption::InventoryPairs)
+        .await?;
+    let updated_power = host.get_antenna_ports(AntennaPortsOption::Power).await?;
+
+    if let AntennaPortsResponse::AccessPair(pair) = updated_access {
+        println!("Updated access pair: tx={} rx={}", pair.tx, pair.rx);
+    }
+    if let AntennaPortsResponse::InventoryPairs(pairs) = updated_inventory {
+        println!("Updated inventory pairs: {pairs:?}");
+    }
+    if let AntennaPortsResponse::Power(entries) = updated_power {
+        println!("Updated antenna power entries (0.01 dBm): {entries:?}");
     }
 
     // --- Async inventory: heartbeats (pings) enabled, 2-minute window ---
@@ -82,18 +139,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Starting async inventory (2 minutes, heartbeats enabled)…");
-    // Switch to a long read timeout before going async: the reader only pushes
-    // frames when it has data (tags or heartbeats), so the normal 500 ms
-    // command timeout would cause spurious TimedOut errors between frames.
-    host.transport_mut().set_timeout(Duration::from_secs(30))?;
-    host.enable_async_inventory(&start_data)?;
+    host.enable_async_inventory(&start_data).await?;
 
-    let session = host.into_async_session();
+    let mut session = host.into_async_session();
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    let deadline = Instant::now() + Duration::from_secs(120);
 
-    for result in &session.message_rx {
-        match result? {
+    loop {
+        match session.recv().await? {
             AsyncInventoryMessage::TagInformation { metadata_flags, tag } => {
                 println!(
                     "  Tag\n    metadata_flags: 0x{flags:04X}\n    read_count: {read_count:?}\n    rssi_dbm: {rssi:?}\n    antenna_id: {antenna_id:?}\n    frequency_khz: {frequency:?}\n    timestamp_ms: {timestamp:?}\n    rfu: {rfu:?}\n    protocol_id: {protocol_id:?}\n    tag_data_bit_length: {tag_data_bits:?}\n    tag_data: {tag_data:02X?}\n    epc_bit_length: {epc_bits}\n    pc_word: 0x{pc:04X}\n    epc_id: {epc:02X?}\n    tag_crc: 0x{crc:04X}",
@@ -135,27 +188,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        if std::time::Instant::now() >= deadline {
+        if Instant::now() >= deadline {
             println!("2-minute window elapsed, stopping…");
             break;
         }
     }
 
-    let mut host = session.stop().map_err(|()| "background thread panicked")?;
-
-    // Drain any messages still queued after stop (including the StopAck if
-    // the loop broke before seeing it), so the log is complete.
+    let mut host = session.stop().await?;
 
     println!("Resetting module to bootloader mode…");
-    host.boot_bootloader()?;
+    host.boot_bootloader().await?;
 
     Ok(())
 }
 
-#[cfg(not(feature = "serialport"))]
+#[cfg(not(feature = "serial"))]
 fn main() {
-    eprintln!("Enable the 'serialport' feature to run this example.");
+    eprintln!("Enable the 'serial' feature to run this example.");
     eprintln!(
-        "Example: cargo run --features serialport --example serial_query -- /dev/ttyUSB0 115200"
+        "Example: cargo run --features serial --example serial_query -- /dev/ttyUSB0 115200"
     );
 }

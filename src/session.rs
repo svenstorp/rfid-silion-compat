@@ -1,212 +1,116 @@
-use std::sync::mpsc;
-use std::thread;
-
-use crate::client::{ClientError, ReaderClient};
-use crate::codes::{CommandCode, StatusCode};
+use crate::client::ReaderClient;
+use crate::codes::CommandCode;
 use crate::command::HostCommand;
 use crate::host::{parse_async_frame_data, AsyncInventoryMessage, SilionHost};
 use crate::transport::ReaderTransport;
+use crate::ClientError;
 
-/// An active asynchronous inventory session driven by a background reader thread.
+/// An active asynchronous inventory session driven by awaited reads.
 ///
 /// Created by [`SilionHost::into_async_session`]. The transport is moved into
-/// the background thread for the duration of the session; no other commands
-/// can be sent until [`stop`][Self::stop] is called and the transport is
-/// returned.
-///
-/// # Lifecycle
-///
-/// ```text
-/// let mut host = SilionHost::new(transport);
-/// // configure...
-/// host.enable_async_inventory(&start_data)?;
-///
-/// let session = host.into_async_session();
-///
-/// // Drain messages on the current thread or hand session.message_rx to a
-/// // dedicated receiver thread.
-/// for result in &session.message_rx {
-///     match result? {
-///         AsyncInventoryMessage::TagInformation { tag, .. } => {
-///             let _ = tag.epc_id;
-///         }
-///         AsyncInventoryMessage::StopAck => break,
-///         _ => {}
-///     }
-/// }
-///
-/// let host = session.stop()?;  // recovered for future synchronous commands
-/// ```
-///
-/// # Stop behaviour
-///
-/// When [`stop`][Self::stop] is called the background thread sends the
-/// `0xAA49` stop command on the next opportunity (after the current
-/// [`read_exact`][crate::ReaderTransport::read_exact] call returns).
-/// Any frames that arrive between the stop command being written and the
-/// `StopAck` being received are delivered through [`message_rx`] before the
-/// channel closes.
-///
-/// If the session is **dropped without calling `stop`** the background thread
-/// detects that the channel is disconnected and sends the stop command on its
-/// own; the transport cannot be recovered in that case.
-pub struct AsyncInventorySession<T>
-where
-    T: ReaderTransport + Send + 'static,
-    T::Error: Send + 'static,
-{
-    /// Pushed asynchronous inventory messages from the reader.
-    ///
-    /// The channel closes after the `StopAck` frame is received or after an
-    /// unrecoverable transport error.
-    pub message_rx: mpsc::Receiver<Result<AsyncInventoryMessage, ClientError<T::Error>>>,
-    stop_tx: mpsc::SyncSender<()>,
-    transport_rx: mpsc::Receiver<T>,
-    _thread: thread::JoinHandle<()>,
+/// this session for the duration of asynchronous inventory, and no other
+/// commands can be sent until [`stop`][Self::stop] is called and the transport
+/// is recovered as a [`SilionHost`].
+pub struct AsyncInventorySession<T: ReaderTransport> {
+    client: ReaderClient<T>,
 }
 
-impl<T> AsyncInventorySession<T>
-where
-    T: ReaderTransport + Send + 'static,
-    T::Error: Send + 'static,
-{
-    pub(crate) fn spawn(client: ReaderClient<T>) -> Self {
-        // Capacity-1 so the bg thread can deposit the transport and exit
-        // without blocking even when stop() is not called promptly.
-        let (stop_tx, stop_rx) = mpsc::sync_channel::<()>(1);
-        let (msg_tx, msg_rx) =
-            mpsc::channel::<Result<AsyncInventoryMessage, ClientError<T::Error>>>();
-        let (transport_tx, transport_rx) = mpsc::sync_channel::<T>(1);
-
-        let thread = thread::spawn(move || {
-            let mut client = client;
-            'reader: loop {
-                // Check for a pending stop signal (or a dropped session) before
-                // blocking on the next read.
-                match stop_rx.try_recv() {
-                    Ok(()) => {
-                        write_stop_then_drain(&mut client, &msg_tx);
-                        break 'reader;
-                    }
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        // Session was dropped without stop() — clean up anyway.
-                        write_stop_then_drain(&mut client, &msg_tx);
-                        break 'reader;
-                    }
-                    Err(mpsc::TryRecvError::Empty) => {}
-                }
-
-                let frame = match client.read_frame() {
-                    Ok(f) => f,
-                    Err(e) => {
-                        let _ = msg_tx.send(Err(e));
-                        break 'reader;
-                    }
-                };
-
-                if frame.command != CommandCode::AsynchronousInventory as u8 {
-                    // Non-async frame while in async mode — report and keep reading.
-                    let _ = msg_tx.send(Err(ClientError::UnexpectedResponseCommand {
-                        expected: CommandCode::AsynchronousInventory as u8,
-                        actual: frame.command,
-                    }));
-                    continue 'reader;
-                }
-
-                if frame.status_raw != StatusCode::Success as u16 {
-                    let _ = msg_tx.send(Err(ClientError::ReaderStatus {
-                        status_raw: frame.status_raw,
-                        status: frame.status,
-                    }));
-                    break 'reader;
-                }
-
-                match parse_async_frame_data(&frame.data) {
-                    Err(e) => {
-                        let _ = msg_tx.send(Err(ClientError::Protocol(e)));
-                    }
-                    Ok(msg) => {
-                        let is_stop_ack = matches!(msg, AsyncInventoryMessage::StopAck);
-                        let _ = msg_tx.send(Ok(msg));
-                        if is_stop_ack {
-                            break 'reader;
-                        }
-                    }
-                }
-            }
-
-            // Always return the transport so stop() can recover it.
-            let _ = transport_tx.send(client.into_inner());
-        });
-
-        Self {
-            message_rx: msg_rx,
-            stop_tx,
-            transport_rx,
-            _thread: thread,
-        }
+impl<T: ReaderTransport> AsyncInventorySession<T> {
+    pub(crate) fn new(client: ReaderClient<T>) -> Self {
+        Self { client }
     }
 
-    /// Signal the background thread to send the `0xAA49` stop command, wait
-    /// for the session to end, and return a [`SilionHost`] wrapping the
-    /// recovered transport.
-    ///
-    /// Any messages already queued in [`message_rx`][Self::message_rx] —
-    /// including the final `StopAck` — can still be drained after this
-    /// returns.
-    ///
-    /// Returns `Err(())` if the background thread panicked before it could
-    /// return the transport.
-    pub fn stop(self) -> Result<SilionHost<T>, ()> {
-        // Ignore the send error: the bg thread may have already exited.
-        let _ = self.stop_tx.send(());
-        self.transport_rx
-            .recv()
-            .map(SilionHost::new)
-            .map_err(|_| ())
+    /// Receive one pushed asynchronous inventory message from the reader.
+    pub async fn recv(&mut self) -> Result<AsyncInventoryMessage, ClientError<T::Error>> {
+        let frame = self.client.read_frame().await?;
+        if frame.command != CommandCode::AsynchronousInventory as u8 {
+            return Err(ClientError::UnexpectedResponseCommand {
+                expected: CommandCode::AsynchronousInventory as u8,
+                actual: frame.command,
+            });
+        }
+        if frame.status_raw != 0x0000 {
+            return Err(ClientError::ReaderStatus {
+                status_raw: frame.status_raw,
+                status: frame.status,
+            });
+        }
+        parse_async_frame_data(&frame.data).map_err(ClientError::Protocol)
+    }
+
+    /// Send `0xAA49`, wait for `StopAck`, and recover the host.
+    pub async fn stop(mut self) -> Result<SilionHost<T>, ClientError<T::Error>> {
+        let stop_packet = HostCommand::async_stop().map_err(ClientError::Protocol)?;
+        self.client.write_frame(&stop_packet).await?;
+
+        loop {
+            let message = self.recv().await?;
+            if matches!(message, AsyncInventoryMessage::StopAck) {
+                break;
+            }
+        }
+
+        Ok(SilionHost::from_client(self.client))
     }
 }
 
-/// Write the async stop command and drain all remaining frames until `StopAck`.
-fn write_stop_then_drain<T>(
-    client: &mut ReaderClient<T>,
-    msg_tx: &mpsc::Sender<Result<AsyncInventoryMessage, ClientError<T::Error>>>,
-) where
-    T: ReaderTransport,
-{
-    let stop_packet = match HostCommand::async_stop() {
-        Ok(p) => p,
-        Err(e) => {
-            let _ = msg_tx.send(Err(ClientError::Protocol(e)));
-            return;
-        }
-    };
+#[cfg(test)]
+mod tests {
+    use super::AsyncInventorySession;
+    use crate::client::ReaderClient;
+    use crate::command::AsyncSubcommandCode;
+    use crate::codes::CommandCode;
+    use crate::test_support::{reply_frame, MockInteraction, MockTransport};
+    use crate::{subcommand_crc, AsyncInventoryMessage, InventorySearchFlags, RegionCode};
 
-    if let Err(e) = client.write_frame(&stop_packet) {
-        let _ = msg_tx.send(Err(e));
-        return;
+    #[test]
+    fn recv_heartbeat_message() {
+        let mut data = b"XTSJ".to_vec();
+        data.extend_from_slice(&0x8000u16.to_be_bytes());
+        data.push(0x01);
+        let packet = reply_frame(CommandCode::AsynchronousInventory as u8, 0x0000, &data);
+        let transport = MockTransport::from_replies(vec![packet]);
+        let client = ReaderClient::new(transport);
+        let mut session = AsyncInventorySession::new(client);
+
+        let message = futures::executor::block_on(session.recv()).expect("message should parse");
+        match message {
+            AsyncInventoryMessage::Heartbeat {
+                search_flags,
+                state_data,
+            } => {
+                assert_eq!(search_flags, InventorySearchFlags::from_raw(0x8000));
+                assert_eq!(state_data, vec![0x01]);
+            }
+            other => panic!("unexpected async message: {other:?}"),
+        }
     }
 
-    // Keep reading until StopAck confirms the reader has stopped streaming.
-    loop {
-        let frame = match client.read_frame() {
-            Ok(f) => f,
-            Err(e) => {
-                let _ = msg_tx.send(Err(e));
-                return;
-            }
-        };
-        match parse_async_frame_data(&frame.data) {
-            Err(e) => {
-                let _ = msg_tx.send(Err(ClientError::Protocol(e)));
-            }
-            Ok(msg) => {
-                let is_stop_ack = matches!(msg, AsyncInventoryMessage::StopAck);
-                let _ = msg_tx.send(Ok(msg));
-                if is_stop_ack {
-                    return;
-                }
-            }
-        }
+    #[test]
+    fn stop_recovers_host() {
+        let mut stop_ack = b"Moduletech".to_vec();
+        stop_ack.extend_from_slice(&(AsyncSubcommandCode::Stop as u16).to_be_bytes());
+        stop_ack.push(subcommand_crc(AsyncSubcommandCode::Stop as u16, &[]));
+        stop_ack.push(0xBB);
+
+        let transport = MockTransport::scripted(vec![
+            MockInteraction {
+                request_command: CommandCode::AsynchronousInventory as u8,
+                response_status: 0x0000,
+                response_data: stop_ack,
+            },
+            MockInteraction {
+                request_command: CommandCode::GetCurrentRegion as u8,
+                response_status: 0x0000,
+                response_data: vec![0x01],
+            },
+        ]);
+        let client = ReaderClient::new(transport);
+        let session = AsyncInventorySession::new(client);
+
+        let mut host = futures::executor::block_on(session.stop()).expect("stop should recover host");
+        let region = futures::executor::block_on(host.get_current_region())
+            .expect("recovered host should work");
+        assert_eq!(region, RegionCode::NorthAmerica);
     }
 }

@@ -20,11 +20,11 @@ impl MockTransport {
 impl ReaderTransport for MockTransport {
     type Error = &'static str;
 
-    fn write_all(&mut self, _data: &[u8]) -> Result<(), Self::Error> {
+    async fn write_all(&mut self, _data: &[u8]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
         if self.rx.len() < buf.len() {
             return Err("eof");
         }
@@ -62,13 +62,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transport = MockTransport::from_frames(vec![version, region, temp]);
     let mut host = SilionHost::new(transport);
 
-    let v = host.get_version()?;
+    let v = futures::executor::block_on(host.get_version())?;
     println!("FW version bytes: {:02X?}", v.firmware_version);
 
-    let region = host.get_current_region()?;
+    let region = futures::executor::block_on(host.get_current_region())?;
     println!("Region: {region}");
 
-    let temperature = host.get_current_temperature()?;
+    let temperature = futures::executor::block_on(host.get_current_temperature())?;
     println!("Temperature: {temperature}C");
 
     Ok(())

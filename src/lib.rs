@@ -53,9 +53,13 @@ mod session;
 #[doc(hidden)]
 pub mod test_support;
 
-#[cfg(feature = "serialport")]
-/// Serial port transport adapter backed by the `serialport` crate.
+#[cfg(feature = "serial")]
+/// Serial port transport adapter backed by the `tokio-serial` crate.
 pub mod serial;
+
+#[cfg(all(target_arch = "wasm32", feature = "web-serial"))]
+/// Web Serial transport adapter for browser targets.
+pub mod web_serial;
 
 pub use error::ProtocolError;
 pub use codes::{AntennaPortsOption, CommandCode, RegionCode, StatusCode};
@@ -68,6 +72,7 @@ pub use command::{
 pub use async_proto::{
     parse_async_payload, parse_async_payload_owned, subcommand_crc, AsyncPayload, AsyncPayloadOwned,
 };
+pub use transport::ReaderTransport;
 pub use parsers::{
     parse_antenna_ports_response, parse_available_regions, parse_current_region,
     parse_current_tag_protocol, parse_current_temperature, parse_frequency_hopping_table,
@@ -78,7 +83,6 @@ pub use parsers::{
     ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime, RunPhase,
     SerialNumberInfo, TagEpcAndMetaData, VersionInfo,
 };
-pub use transport::ReaderTransport;
 pub use client::{ClientError, ReaderClient};
 pub use host::{AsyncInventoryMessage, SilionHost};
 pub use session::AsyncInventorySession;
@@ -194,12 +198,12 @@ mod tests {
     impl ReaderTransport for TestTransport {
         type Error = &'static str;
 
-        fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+        async fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
             self.tx.extend_from_slice(data);
             Ok(())
         }
 
-        fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+        async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
             if self.rx.len() < buf.len() {
                 return Err("eof");
             }
@@ -237,9 +241,9 @@ mod tests {
         let transport = TestTransport::from_frames(vec![version, region]);
         let mut host = SilionHost::new(transport);
 
-        let v = host.get_version().unwrap();
+        let v = futures::executor::block_on(host.get_version()).unwrap();
         assert_eq!(v.supported_protocol, [0, 0, 0, 0x10]);
-        let r = host.get_current_region().unwrap();
+        let r = futures::executor::block_on(host.get_current_region()).unwrap();
         assert_eq!(r, RegionCode::NorthAmerica);
     }
 }

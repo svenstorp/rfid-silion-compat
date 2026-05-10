@@ -5,7 +5,21 @@ edition = "2024"
 
 [features]
 default = []
-serialport = ["dep:serialport"]
+serial = ["dep:tokio", "dep:tokio-serial"]
+web-serial = [
+	"dep:js-sys",
+	"dep:wasm-bindgen",
+	"dep:wasm-bindgen-futures",
+]
 
 [dependencies]
-serialport = { version = "4.7.3", optional = true, default-features = false }
+tokio = { version = "1", optional = true, features = ["io-util", "macros", "rt-multi-thread", "time"] }
+tokio-serial = { version = "5.4.5", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+
+[dev-dependencies]
+futures = "0.3"

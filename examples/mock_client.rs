@@ -25,12 +25,12 @@ impl MockTransport {
 impl ReaderTransport for MockTransport {
     type Error = MockError;
 
-    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+    async fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         self.tx.extend_from_slice(data);
         Ok(())
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
         if self.rx.len() < buf.len() {
             return Err(MockError::Eof);
         }
@@ -70,15 +70,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transport = MockTransport::new(vec![version_reply, region_reply]);
     let mut client = ReaderClient::new(transport);
 
-    let version_frame = client
-        .transact(CommandCode::GetVersion as u8, &[])
+    let version_frame = futures::executor::block_on(client.transact(CommandCode::GetVersion as u8, &[]))
         .map_err(render_client_error)?;
     let version = parse_version_info(&version_frame.data)?;
     println!("Firmware version bytes: {:02X?}", version.firmware_version);
 
-    let region_frame = client
-        .transact(CommandCode::GetCurrentRegion as u8, &[])
-        .map_err(render_client_error)?;
+    let region_frame = futures::executor::block_on(
+        client.transact(CommandCode::GetCurrentRegion as u8, &[]),
+    )
+    .map_err(render_client_error)?;
     let region = parse_current_region(&region_frame.data)?;
     assert_eq!(region, RegionCode::NorthAmerica);
     println!("Current region: {region}");

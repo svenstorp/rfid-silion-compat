@@ -48,7 +48,7 @@ impl MockTransport {
 impl ReaderTransport for MockTransport {
     type Error = &'static str;
 
-    fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
+    async fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         if let Some(next) = self.scripted.pop_front() {
             if data.len() < 3 || data[0] != 0xFF {
                 return Err("invalid request frame");
@@ -62,7 +62,7 @@ impl ReaderTransport for MockTransport {
         Ok(())
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
         if self.rx.len() < buf.len() {
             return Err("eof");
         }
