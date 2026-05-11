@@ -54,7 +54,9 @@ fn parse_select_content(value: JsValue) -> Result<SelectContent, JsValue> {
         .as_f64()
         .ok_or_else(|| js_error("select_content.bitLen must be a number"))?;
     if !(0.0..=u8::MAX as f64).contains(&bit_len) || bit_len.fract() != 0.0 {
-        return Err(js_error("select_content.bitLen must be an integer in 0..=255"));
+        return Err(js_error(
+            "select_content.bitLen must be an integer in 0..=255",
+        ));
     }
     let bit_len = bit_len as u8;
 

@@ -11,10 +11,9 @@ use crate::parsers::{
     RunPhase, SerialNumberInfo, TagEpcAndMetaData, VersionInfo, parse_antenna_ports_response,
     parse_available_regions, parse_current_region, parse_current_tag_protocol,
     parse_current_temperature, parse_frequency_hopping_table, parse_pin_states,
-    parse_single_tag_inventory_response,
     parse_protocol_configuration_value, parse_reader_configuration_value,
     parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
-    parse_tag_epc_and_meta_data, parse_version_info,
+    parse_single_tag_inventory_response, parse_tag_epc_and_meta_data, parse_version_info,
 };
 use crate::session::AsyncInventorySession;
 use crate::transport::ReaderTransport;
@@ -611,8 +610,8 @@ mod tests {
 
         let mut reader = SilionReader::new(transport);
         let tag = futures::executor::block_on(reader.single_tag_inventory(
-            5000, // 5 second timeout
-            InventoryOption::default(), // option
+            5000,                            // 5 second timeout
+            InventoryOption::default(),      // option
             MetadataFlags::from_raw(0x0000), // no metadata fields
             None,
         ))

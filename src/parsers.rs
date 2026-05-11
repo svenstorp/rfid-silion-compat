@@ -3,9 +3,8 @@ use crate::command::MetadataFlags;
 use crate::error::ProtocolError;
 use std::sync::LazyLock;
 
-static TAG_PARSE_DEBUG_ENABLED: LazyLock<bool> = LazyLock::new(|| {
-    std::env::var_os("RFID_SILION_COMPAT_TAG_PARSE_DEBUG").is_some()
-});
+static TAG_PARSE_DEBUG_ENABLED: LazyLock<bool> =
+    LazyLock::new(|| std::env::var_os("RFID_SILION_COMPAT_TAG_PARSE_DEBUG").is_some());
 
 /// Version information returned by 0x03/0x04 responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -431,8 +430,7 @@ fn read_u32_from_data(
         }
         return Err(ProtocolError::InvalidResponse(what));
     }
-    let out =
-        u32::from_be_bytes([data[*idx], data[*idx + 1], data[*idx + 2], data[*idx + 3]]);
+    let out = u32::from_be_bytes([data[*idx], data[*idx + 1], data[*idx + 2], data[*idx + 3]]);
     *idx += 4;
     Ok(out)
 }
@@ -462,7 +460,11 @@ pub fn parse_tag_epc_and_meta_data(
     }
 
     let read_count = if metadata_flags.read_count() {
-        Some(read_u8_from_data(&mut idx, data, "tag metadata missing read count")?)
+        Some(read_u8_from_data(
+            &mut idx,
+            data,
+            "tag metadata missing read count",
+        )?)
     } else {
         None
     };
@@ -480,7 +482,11 @@ pub fn parse_tag_epc_and_meta_data(
     }
 
     let antenna_id = if metadata_flags.antenna_id() {
-        Some(read_u8_from_data(&mut idx, data, "tag metadata missing antenna id")?)
+        Some(read_u8_from_data(
+            &mut idx,
+            data,
+            "tag metadata missing antenna id",
+        )?)
     } else {
         None
     };
@@ -489,7 +495,11 @@ pub fn parse_tag_epc_and_meta_data(
     }
 
     let frequency_khz = if metadata_flags.frequency() {
-        Some(read_u24_from_data(&mut idx, data, "tag metadata missing frequency")?)
+        Some(read_u24_from_data(
+            &mut idx,
+            data,
+            "tag metadata missing frequency",
+        )?)
     } else {
         None
     };
@@ -500,7 +510,11 @@ pub fn parse_tag_epc_and_meta_data(
     }
 
     let timestamp_ms = if metadata_flags.timestamp() {
-        Some(read_u32_from_data(&mut idx, data, "tag metadata missing timestamp")?)
+        Some(read_u32_from_data(
+            &mut idx,
+            data,
+            "tag metadata missing timestamp",
+        )?)
     } else {
         None
     };
@@ -509,7 +523,11 @@ pub fn parse_tag_epc_and_meta_data(
     }
 
     let rfu = if metadata_flags.rfu() {
-        Some(read_u16_from_data(&mut idx, data, "tag metadata missing RFU")?)
+        Some(read_u16_from_data(
+            &mut idx,
+            data,
+            "tag metadata missing RFU",
+        )?)
     } else {
         None
     };
@@ -518,7 +536,11 @@ pub fn parse_tag_epc_and_meta_data(
     }
 
     let protocol_id = if metadata_flags.protocol_id() {
-        Some(read_u8_from_data(&mut idx, data, "tag metadata missing protocol id")?)
+        Some(read_u8_from_data(
+            &mut idx,
+            data,
+            "tag metadata missing protocol id",
+        )?)
     } else {
         None
     };
@@ -578,7 +600,8 @@ pub fn parse_tag_epc_and_meta_data(
             "EPC length must be byte-aligned",
         ));
     }*/
-    let epc_total_bytes = read_u8_from_data(&mut idx, data, "tag metadata missing EPC length")? as usize;
+    let epc_total_bytes =
+        read_u8_from_data(&mut idx, data, "tag metadata missing EPC length")? as usize;
     let epc_bit_length = (epc_total_bytes as u16) * 8;
 
     if epc_total_bytes < 4 {
@@ -776,7 +799,11 @@ pub fn parse_single_tag_inventory_payload(
     let mut idx = 0usize;
 
     let read_count = if metadata_flags.read_count() {
-        Some(read_u8_from_data(&mut idx, data, "single tag metadata missing read count")?)
+        Some(read_u8_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing read count",
+        )?)
     } else {
         None
     };
@@ -818,7 +845,11 @@ pub fn parse_single_tag_inventory_payload(
     };
 
     let rfu = if metadata_flags.rfu() {
-        Some(read_u16_from_data(&mut idx, data, "single tag metadata missing RFU")?)
+        Some(read_u16_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing RFU",
+        )?)
     } else {
         None
     };
