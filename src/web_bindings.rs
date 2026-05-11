@@ -1,7 +1,7 @@
 use std::cell::{RefCell, RefMut};
 use std::fmt::Debug;
 
-use js_sys::{Array, Promise, Uint8Array};
+use js_sys::{Array, Promise, Reflect, Uint8Array};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
@@ -16,7 +16,7 @@ use crate::web_serial::WebSerialTransport;
 use crate::{
     AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPower,
     AsyncInventoryMessage, InventoryOption, InventorySearchFlags, MetadataFlags, RegionCode,
-    RunPhase,
+    RunPhase, SelectContent, SelectMode, SelectOptionBits,
 };
 
 fn js_error(msg: &str) -> JsValue {
@@ -32,6 +32,52 @@ fn debug_error<E: Debug>(err: E) -> JsValue {
 fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(value)
         .map_err(|e| JsValue::from_str(&format!("serialization error: {e}")))
+}
+
+fn parse_select_content(value: JsValue) -> Result<SelectContent, JsValue> {
+    if value.is_null() || value.is_undefined() || !value.is_object() {
+        return Err(js_error(
+            "select_content must be an object: { addressBits, bitLen, data }",
+        ));
+    }
+
+    let address_bits = Reflect::get(&value, &JsValue::from_str("addressBits"))
+        .map_err(|_| js_error("select_content.addressBits is missing"))?
+        .as_f64()
+        .ok_or_else(|| js_error("select_content.addressBits must be a number"))?;
+    if !(0.0..=u32::MAX as f64).contains(&address_bits) || address_bits.fract() != 0.0 {
+        return Err(js_error("select_content.addressBits must be a u32 integer"));
+    }
+
+    let bit_len = Reflect::get(&value, &JsValue::from_str("bitLen"))
+        .map_err(|_| js_error("select_content.bitLen is missing"))?
+        .as_f64()
+        .ok_or_else(|| js_error("select_content.bitLen must be a number"))?;
+    if !(0.0..=u8::MAX as f64).contains(&bit_len) || bit_len.fract() != 0.0 {
+        return Err(js_error("select_content.bitLen must be an integer in 0..=255"));
+    }
+    let bit_len = bit_len as u8;
+
+    let data_value = Reflect::get(&value, &JsValue::from_str("data"))
+        .map_err(|_| js_error("select_content.data is missing"))?;
+    let data = js_value_to_bytes(data_value)?;
+
+    let expected_len = if bit_len == 0 {
+        0
+    } else {
+        ((bit_len as usize) + 7) / 8
+    };
+    if data.len() != expected_len {
+        return Err(js_error(
+            "select_content.data length does not match bitLen (must be ceil(bitLen/8) bytes)",
+        ));
+    }
+
+    Ok(SelectContent {
+        address_bits: address_bits as u32,
+        bit_len,
+        data,
+    })
 }
 
 impl TryFrom<VersionInfo> for JsValue {
@@ -347,6 +393,91 @@ impl WasmSilionReader {
             .await
             .map_err(debug_error)?;
         to_js_value(&value)
+    }
+
+    /// Run command `0x21` (Single Tag Inventory).
+    ///
+    /// Performs a single tag read with the specified timeout. Returns tag EPC and metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Timeout in milliseconds
+    /// * `option_raw` - Inventory option as raw byte (corresponds to [`InventoryOption`] values)
+    /// * `metadata_flags_raw` - Metadata flags as raw u16 (corresponds to [`MetadataFlags`] values)
+    /// * `select_content` - Optional object `{ addressBits, bitLen, data }`, or `undefined`
+    #[wasm_bindgen(js_name = singleTagInventory)]
+    pub async fn single_tag_inventory(
+        &self,
+        timeout_ms: u16,
+        option_raw: u8,
+        metadata_flags_raw: u16,
+        select_content: Option<JsValue>,
+    ) -> Result<JsValue, JsValue> {
+        let option = InventoryOption::from_raw(option_raw);
+        let select_bits = SelectOptionBits::from_raw(option.select_option_bits());
+        if select_bits.extended_data_length() {
+            return Err(js_error(
+                "option bit 0x20 (extended select data length) is not supported by this API",
+            ));
+        }
+
+        let select = match select_content {
+            Some(v) => {
+                if v.is_null() || v.is_undefined() {
+                    None
+                } else {
+                    Some(parse_select_content(v)?)
+                }
+            }
+            None => None,
+        };
+
+        match select_bits.mode() {
+            Some(SelectMode::Disabled) => {
+                if select.is_some() {
+                    return Err(js_error(
+                        "select_content must be undefined when SelectMode is Disabled (0x00)",
+                    ));
+                }
+            }
+            Some(SelectMode::PasswordOnly) => {
+                if select.is_some() {
+                    return Err(js_error(
+                        "select_content must be undefined when SelectMode is PasswordOnly (0x05)",
+                    ));
+                }
+                return Err(js_error(
+                    "SelectMode::PasswordOnly (0x05) is not supported by singleTagInventory because access password is not exposed",
+                ));
+            }
+            Some(SelectMode::Epc)
+            | Some(SelectMode::Tid)
+            | Some(SelectMode::UserMemory)
+            | Some(SelectMode::EpcBank) => {
+                if select.is_none() {
+                    return Err(js_error(
+                        "select_content is required when SelectMode is 0x01..0x04",
+                    ));
+                }
+            }
+            None => {
+                return Err(js_error(
+                    "unsupported select mode in option_raw; expected SelectMode 0x00..0x05",
+                ));
+            }
+        }
+
+        let mut reader = self.reader_mut()?;
+        let tag = reader
+            .single_tag_inventory(
+                timeout_ms,
+                option,
+                MetadataFlags::from_raw(metadata_flags_raw),
+                select,
+            )
+            .await
+            .map_err(debug_error)?;
+        to_js_value(&tag)
     }
 
     /// Start asynchronous inventory with a basic default configuration.

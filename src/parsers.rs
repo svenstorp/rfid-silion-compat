@@ -1,6 +1,11 @@
 use crate::codes::{AntennaPortsOption, RegionCode};
 use crate::command::MetadataFlags;
 use crate::error::ProtocolError;
+use std::sync::LazyLock;
+
+static TAG_PARSE_DEBUG_ENABLED: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var_os("RFID_SILION_COMPAT_TAG_PARSE_DEBUG").is_some()
+});
 
 /// Version information returned by 0x03/0x04 responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -347,6 +352,91 @@ pub struct TagEpcAndMetaData {
     pub tag_crc: u16,
 }
 
+/// Module-level helper to read a single byte with bounds checking and optional debug output.
+fn read_u8_from_data(
+    idx: &mut usize,
+    data: &[u8],
+    what: &'static str,
+) -> Result<u8, ProtocolError> {
+    if *idx + 1 > data.len() {
+        if *TAG_PARSE_DEBUG_ENABLED {
+            eprintln!(
+                "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=1, len={len})",
+                idx = *idx,
+                len = data.len()
+            );
+        }
+        return Err(ProtocolError::InvalidResponse(what));
+    }
+    let out = data[*idx];
+    *idx += 1;
+    Ok(out)
+}
+
+/// Module-level helper to read a 16-bit big-endian value with bounds checking and optional debug output.
+fn read_u16_from_data(
+    idx: &mut usize,
+    data: &[u8],
+    what: &'static str,
+) -> Result<u16, ProtocolError> {
+    if *idx + 2 > data.len() {
+        if *TAG_PARSE_DEBUG_ENABLED {
+            eprintln!(
+                "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=2, len={len})",
+                idx = *idx,
+                len = data.len()
+            );
+        }
+        return Err(ProtocolError::InvalidResponse(what));
+    }
+    let out = u16::from_be_bytes([data[*idx], data[*idx + 1]]);
+    *idx += 2;
+    Ok(out)
+}
+
+/// Module-level helper to read a 24-bit big-endian value with bounds checking and optional debug output.
+fn read_u24_from_data(
+    idx: &mut usize,
+    data: &[u8],
+    what: &'static str,
+) -> Result<u32, ProtocolError> {
+    if *idx + 3 > data.len() {
+        if *TAG_PARSE_DEBUG_ENABLED {
+            eprintln!(
+                "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=3, len={len})",
+                idx = *idx,
+                len = data.len()
+            );
+        }
+        return Err(ProtocolError::InvalidResponse(what));
+    }
+    let out = u32::from_be_bytes([0, data[*idx], data[*idx + 1], data[*idx + 2]]);
+    *idx += 3;
+    Ok(out)
+}
+
+/// Module-level helper to read a 32-bit big-endian value with bounds checking and optional debug output.
+fn read_u32_from_data(
+    idx: &mut usize,
+    data: &[u8],
+    what: &'static str,
+) -> Result<u32, ProtocolError> {
+    if *idx + 4 > data.len() {
+        if *TAG_PARSE_DEBUG_ENABLED {
+            eprintln!(
+                "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=4, len={len})",
+                idx = *idx,
+                len = data.len()
+            );
+        }
+        return Err(ProtocolError::InvalidResponse(what));
+    }
+    let out =
+        u32::from_be_bytes([data[*idx], data[*idx + 1], data[*idx + 2], data[*idx + 3]]);
+    *idx += 4;
+    Ok(out)
+}
+
 /// Parse one `Tag EPC and Meta Data` block.
 ///
 /// The field presence and order are controlled by [`MetadataFlags`], and must
@@ -356,9 +446,8 @@ pub fn parse_tag_epc_and_meta_data(
     data: &[u8],
 ) -> Result<TagEpcAndMetaData, ProtocolError> {
     let mut idx = 0usize;
-    let debug_enabled = std::env::var_os("RFID_SILION_COMPAT_TAG_PARSE_DEBUG").is_some();
 
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!(
             "[rfid-silion-compat][tag-parse] start flags=0x{flags:04X} data_len={len}",
             flags = metadata_flags.raw(),
@@ -372,143 +461,75 @@ pub fn parse_tag_epc_and_meta_data(
         }
     }
 
-    let read_u8 = |idx: &mut usize, data: &[u8], what: &'static str| -> Result<u8, ProtocolError> {
-        if *idx + 1 > data.len() {
-            if debug_enabled {
-                eprintln!(
-                    "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=1, len={len})",
-                    idx = *idx,
-                    len = data.len()
-                );
-            }
-            return Err(ProtocolError::InvalidResponse(what));
-        }
-        let out = data[*idx];
-        *idx += 1;
-        Ok(out)
-    };
-
-    let read_u16 =
-        |idx: &mut usize, data: &[u8], what: &'static str| -> Result<u16, ProtocolError> {
-            if *idx + 2 > data.len() {
-                if debug_enabled {
-                    eprintln!(
-                        "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=2, len={len})",
-                        idx = *idx,
-                        len = data.len()
-                    );
-                }
-                return Err(ProtocolError::InvalidResponse(what));
-            }
-            let out = u16::from_be_bytes([data[*idx], data[*idx + 1]]);
-            *idx += 2;
-            Ok(out)
-        };
-
-    let read_u24 =
-        |idx: &mut usize, data: &[u8], what: &'static str| -> Result<u32, ProtocolError> {
-            if *idx + 3 > data.len() {
-                if debug_enabled {
-                    eprintln!(
-                        "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=3, len={len})",
-                        idx = *idx,
-                        len = data.len()
-                    );
-                }
-                return Err(ProtocolError::InvalidResponse(what));
-            }
-            let out = u32::from_be_bytes([0, data[*idx], data[*idx + 1], data[*idx + 2]]);
-            *idx += 3;
-            Ok(out)
-        };
-
-    let read_u32 =
-        |idx: &mut usize, data: &[u8], what: &'static str| -> Result<u32, ProtocolError> {
-            if *idx + 4 > data.len() {
-                if debug_enabled {
-                    eprintln!(
-                        "[rfid-silion-compat][tag-parse] {what} (idx={idx}, need=4, len={len})",
-                        idx = *idx,
-                        len = data.len()
-                    );
-                }
-                return Err(ProtocolError::InvalidResponse(what));
-            }
-            let out =
-                u32::from_be_bytes([data[*idx], data[*idx + 1], data[*idx + 2], data[*idx + 3]]);
-            *idx += 4;
-            Ok(out)
-        };
-
     let read_count = if metadata_flags.read_count() {
-        Some(read_u8(&mut idx, data, "tag metadata missing read count")?)
+        Some(read_u8_from_data(&mut idx, data, "tag metadata missing read count")?)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!("[rfid-silion-compat][tag-parse] field read_count={read_count:?} idx={idx}");
     }
 
     let rssi_dbm = if metadata_flags.rssi() {
-        Some(read_u8(&mut idx, data, "tag metadata missing RSSI")? as i8)
+        Some(read_u8_from_data(&mut idx, data, "tag metadata missing RSSI")? as i8)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!("[rfid-silion-compat][tag-parse] field rssi_dbm={rssi_dbm:?} idx={idx}");
     }
 
     let antenna_id = if metadata_flags.antenna_id() {
-        Some(read_u8(&mut idx, data, "tag metadata missing antenna id")?)
+        Some(read_u8_from_data(&mut idx, data, "tag metadata missing antenna id")?)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!("[rfid-silion-compat][tag-parse] field antenna_id={antenna_id:?} idx={idx}");
     }
 
     let frequency_khz = if metadata_flags.frequency() {
-        Some(read_u24(&mut idx, data, "tag metadata missing frequency")?)
+        Some(read_u24_from_data(&mut idx, data, "tag metadata missing frequency")?)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!(
             "[rfid-silion-compat][tag-parse] field frequency_khz={frequency_khz:?} idx={idx}"
         );
     }
 
     let timestamp_ms = if metadata_flags.timestamp() {
-        Some(read_u32(&mut idx, data, "tag metadata missing timestamp")?)
+        Some(read_u32_from_data(&mut idx, data, "tag metadata missing timestamp")?)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!("[rfid-silion-compat][tag-parse] field timestamp_ms={timestamp_ms:?} idx={idx}");
     }
 
     let rfu = if metadata_flags.rfu() {
-        Some(read_u16(&mut idx, data, "tag metadata missing RFU")?)
+        Some(read_u16_from_data(&mut idx, data, "tag metadata missing RFU")?)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!("[rfid-silion-compat][tag-parse] field rfu={rfu:?} idx={idx}");
     }
 
     let protocol_id = if metadata_flags.protocol_id() {
-        Some(read_u8(&mut idx, data, "tag metadata missing protocol id")?)
+        Some(read_u8_from_data(&mut idx, data, "tag metadata missing protocol id")?)
     } else {
         None
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!("[rfid-silion-compat][tag-parse] field protocol_id={protocol_id:?} idx={idx}");
     }
 
     let (tag_data_bit_length, tag_data) = if metadata_flags.data_length() {
-        let bits = read_u16(&mut idx, data, "tag metadata missing tag data length")?;
+        let bits = read_u16_from_data(&mut idx, data, "tag metadata missing tag data length")?;
         if bits % 8 != 0 {
-            if debug_enabled {
+            if *TAG_PARSE_DEBUG_ENABLED {
                 eprintln!(
                     "[rfid-silion-compat][tag-parse] tag_data_bit_length not byte-aligned: bits={bits} idx={idx}"
                 );
@@ -519,7 +540,7 @@ pub fn parse_tag_epc_and_meta_data(
         }
         let bytes = (bits / 8) as usize;
         if idx + bytes > data.len() {
-            if debug_enabled {
+            if *TAG_PARSE_DEBUG_ENABLED {
                 eprintln!(
                     "[rfid-silion-compat][tag-parse] tag metadata missing tag data bytes (idx={idx}, need={need}, len={len})",
                     need = bytes,
@@ -536,7 +557,7 @@ pub fn parse_tag_epc_and_meta_data(
     } else {
         (None, None)
     };
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!(
             "[rfid-silion-compat][tag-parse] field tag_data_bit_length={tag_data_bit_length:?} tag_data_len={tag_data_len:?} idx={idx}",
             tag_data_len = tag_data.as_ref().map(|v| v.len())
@@ -547,7 +568,7 @@ pub fn parse_tag_epc_and_meta_data(
     // The reader always returns a byte length, so we read it as a byte length and convert to bits for the struct field..
     /*let epc_bit_length = read_u16(&mut idx, data, "tag metadata missing EPC length")?;
     if epc_bit_length % 8 != 0 {
-        if debug_enabled {
+        if *TAG_PARSE_DEBUG_ENABLED {
             eprintln!(
                 "[rfid-silion-compat][tag-parse] epc_bit_length not byte-aligned: bits={bits}",
                 bits = epc_bit_length
@@ -557,11 +578,11 @@ pub fn parse_tag_epc_and_meta_data(
             "EPC length must be byte-aligned",
         ));
     }*/
-    let epc_total_bytes = read_u8(&mut idx, data, "tag metadata missing EPC length")? as usize;
+    let epc_total_bytes = read_u8_from_data(&mut idx, data, "tag metadata missing EPC length")? as usize;
     let epc_bit_length = (epc_total_bytes as u16) * 8;
 
     if epc_total_bytes < 4 {
-        if debug_enabled {
+        if *TAG_PARSE_DEBUG_ENABLED {
             eprintln!(
                 "[rfid-silion-compat][tag-parse] EPC length too small: epc_total_bytes={epc_total_bytes}"
             );
@@ -571,17 +592,17 @@ pub fn parse_tag_epc_and_meta_data(
         ));
     }
 
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!(
             "[rfid-silion-compat][tag-parse] epc_total_bytes={epc_total} idx_before_pc={idx}",
             epc_total = epc_total_bytes
         );
     }
 
-    let pc_word = read_u16(&mut idx, data, "tag metadata missing PC word")?;
+    let pc_word = read_u16_from_data(&mut idx, data, "tag metadata missing PC word")?;
 
     let epc_id_len = epc_total_bytes - 4;
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!(
             "[rfid-silion-compat][tag-parse] pc_word=0x{pc:04X} epc_id_len={epc_id_len} idx_before_epc={idx} data_len={len}",
             pc = pc_word,
@@ -589,7 +610,7 @@ pub fn parse_tag_epc_and_meta_data(
         );
     }
     if idx + epc_id_len > data.len() {
-        if debug_enabled {
+        if *TAG_PARSE_DEBUG_ENABLED {
             eprintln!(
                 "[rfid-silion-compat][tag-parse] tag metadata missing EPC ID (idx={idx}, epc_id_len={epc_id_len}, len={len})",
                 len = data.len()
@@ -626,10 +647,10 @@ pub fn parse_tag_epc_and_meta_data(
     let epc_id = data[idx..idx + epc_id_len].to_vec();
     idx += epc_id_len;
 
-    let tag_crc = read_u16(&mut idx, data, "tag metadata missing tag CRC")?;
+    let tag_crc = read_u16_from_data(&mut idx, data, "tag metadata missing tag CRC")?;
 
     if idx != data.len() {
-        if debug_enabled {
+        if *TAG_PARSE_DEBUG_ENABLED {
             eprintln!(
                 "[rfid-silion-compat][tag-parse] trailing bytes after tag metadata block (idx={idx}, len={len}, trailing={trailing})",
                 len = data.len(),
@@ -641,7 +662,7 @@ pub fn parse_tag_epc_and_meta_data(
         ));
     }
 
-    if debug_enabled {
+    if *TAG_PARSE_DEBUG_ENABLED {
         eprintln!(
             "[rfid-silion-compat][tag-parse] done read_count={read_count:?} rssi={rssi:?} ant={ant:?} freq={freq:?} ts={ts:?} rfu={rfu:?} proto={proto:?} tag_data_bits={tag_data_bits:?} epc_bits={epc_bits} epc_len={epc_len} crc=0x{crc:04X}",
             rssi = rssi_dbm,
@@ -668,6 +689,209 @@ pub fn parse_tag_epc_and_meta_data(
         tag_data,
         epc_bit_length,
         pc_word,
+        epc_id,
+        tag_crc,
+    })
+}
+
+/// Parse full command `0x21` (Single Tag Inventory) response payload.
+///
+/// Format is determined by bit4 of the echoed response option byte:
+/// - bit4=0: `Option(1) | EPC ID(N) | Tag CRC(2)`
+/// - bit4=1: `Option(1) | MetadataFlags(2) | <single-tag metadata payload>`
+///
+/// Returns the echoed metadata flags together with parsed tag data.
+pub fn parse_single_tag_inventory_response(
+    request_option_raw: u8,
+    data: &[u8],
+) -> Result<(MetadataFlags, TagEpcAndMetaData), ProtocolError> {
+    if data.is_empty() {
+        return Err(ProtocolError::InvalidResponse(
+            "single tag inventory response missing option",
+        ));
+    }
+
+    let response_option = data[0];
+    if response_option != request_option_raw {
+        return Err(ProtocolError::InvalidResponse(
+            "single tag inventory response option does not match request",
+        ));
+    }
+
+    if (response_option & 0x10) != 0 {
+        if data.len() < 3 {
+            return Err(ProtocolError::InvalidResponse(
+                "single tag inventory response missing metadata flags",
+            ));
+        }
+        let metadata_flags = MetadataFlags::from_raw(u16::from_be_bytes([data[1], data[2]]));
+        let tag = parse_single_tag_inventory_payload(metadata_flags, &data[3..])?;
+        Ok((metadata_flags, tag))
+    } else {
+        let metadata_flags = MetadataFlags::NONE;
+        let tag = parse_single_tag_inventory_epc_only_payload(&data[1..])?;
+        Ok((metadata_flags, tag))
+    }
+}
+
+fn parse_single_tag_inventory_epc_only_payload(
+    data: &[u8],
+) -> Result<TagEpcAndMetaData, ProtocolError> {
+    if data.len() < 3 {
+        return Err(ProtocolError::InvalidResponse(
+            "single tag EPC-only payload too short",
+        ));
+    }
+
+    let epc_id_len = data.len() - 2;
+    let epc_id = data[..epc_id_len].to_vec();
+    let tag_crc = u16::from_be_bytes([data[epc_id_len], data[epc_id_len + 1]]);
+
+    Ok(TagEpcAndMetaData {
+        read_count: None,
+        rssi_dbm: None,
+        antenna_id: None,
+        frequency_khz: None,
+        timestamp_ms: None,
+        rfu: None,
+        protocol_id: None,
+        tag_data_bit_length: None,
+        tag_data: None,
+        epc_bit_length: (epc_id.len() as u16) * 8,
+        pc_word: 0,
+        epc_id,
+        tag_crc,
+    })
+}
+
+/// Parse the payload portion of command `0x21` (Single Tag Inventory)
+/// after `Option(1) + MetadataFlags(2)`.
+///
+/// This parser follows the Single Tag Inventory response table, where
+/// `EPC ID` is variable-length and `Tag CRC` is the final 2 bytes.
+pub fn parse_single_tag_inventory_payload(
+    metadata_flags: MetadataFlags,
+    data: &[u8],
+) -> Result<TagEpcAndMetaData, ProtocolError> {
+    let mut idx = 0usize;
+
+    let read_count = if metadata_flags.read_count() {
+        Some(read_u8_from_data(&mut idx, data, "single tag metadata missing read count")?)
+    } else {
+        None
+    };
+
+    let rssi_dbm = if metadata_flags.rssi() {
+        Some(read_u8_from_data(&mut idx, data, "single tag metadata missing RSSI")? as i8)
+    } else {
+        None
+    };
+
+    let antenna_id = if metadata_flags.antenna_id() {
+        Some(read_u8_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing antenna id",
+        )?)
+    } else {
+        None
+    };
+
+    let frequency_khz = if metadata_flags.frequency() {
+        Some(read_u24_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing frequency",
+        )?)
+    } else {
+        None
+    };
+
+    let timestamp_ms = if metadata_flags.timestamp() {
+        Some(read_u32_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing timestamp",
+        )?)
+    } else {
+        None
+    };
+
+    let rfu = if metadata_flags.rfu() {
+        Some(read_u16_from_data(&mut idx, data, "single tag metadata missing RFU")?)
+    } else {
+        None
+    };
+
+    let protocol_id = if metadata_flags.protocol_id() {
+        Some(read_u8_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing protocol id",
+        )?)
+    } else {
+        None
+    };
+
+    let (tag_data_bit_length, tag_data) = if metadata_flags.data_length() {
+        let bits = read_u16_from_data(
+            &mut idx,
+            data,
+            "single tag metadata missing tag data length",
+        )?;
+        if bits % 8 != 0 {
+            return Err(ProtocolError::InvalidResponse(
+                "single tag data length must be byte-aligned",
+            ));
+        }
+        let bytes = (bits / 8) as usize;
+        if idx + bytes > data.len() {
+            return Err(ProtocolError::InvalidResponse(
+                "single tag metadata missing tag data bytes",
+            ));
+        }
+        let payload = data[idx..idx + bytes].to_vec();
+        idx += bytes;
+        (Some(bits), Some(payload))
+    } else {
+        (None, None)
+    };
+
+    if data.len() < idx + 2 {
+        return Err(ProtocolError::InvalidResponse(
+            "single tag payload missing tag CRC",
+        ));
+    }
+
+    let epc_id_len = data.len() - idx - 2;
+    if epc_id_len == 0 {
+        return Err(ProtocolError::InvalidResponse(
+            "single tag payload missing EPC ID",
+        ));
+    }
+    let epc_id = data[idx..idx + epc_id_len].to_vec();
+    idx += epc_id_len;
+
+    let tag_crc = read_u16_from_data(&mut idx, data, "single tag payload missing tag CRC")?;
+
+    if idx != data.len() {
+        return Err(ProtocolError::InvalidResponse(
+            "trailing bytes after single tag payload",
+        ));
+    }
+
+    Ok(TagEpcAndMetaData {
+        read_count,
+        rssi_dbm,
+        antenna_id,
+        frequency_khz,
+        timestamp_ms,
+        rfu,
+        protocol_id,
+        tag_data_bit_length,
+        tag_data,
+        epc_bit_length: (epc_id.len() as u16) * 8,
+        pc_word: 0,
         epc_id,
         tag_crc,
     })

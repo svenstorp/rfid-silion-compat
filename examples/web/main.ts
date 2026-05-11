@@ -118,6 +118,20 @@ async function main(): Promise<void> {
     }
   });
 
+  req("singleTag").addEventListener("click", async () => {
+    if (!reader) return log("not connected");
+    try {
+      // Option 0x10: metadata enabled + SelectMode::Disabled
+      // Metadata flags 0x0056: rssi(0x0002) + antenna_id(0x0004) + timestamp(0x0010) + protocol_id(0x0040)
+      // For other SelectMode values: 0x01=Epc, 0x02=Tid, 0x03=UserMemory, 0x04=EpcBank, 0x05=PasswordOnly
+      const tag = await reader.singleTagInventory(5000, 0x10, 0x0056);
+      const epc = bytesToHex(tag.epcId);
+      log(`SINGLE TAG: epc=${epc} rssi=${tag.rssiDbm ?? "n/a"} ant=${tag.antennaId ?? "n/a"}`);
+    } catch (err) {
+      log(`singleTagInventory failed: ${err}`);
+    }
+  });
+
   req("start").addEventListener("click", async () => {
     if (!reader) return log("not connected");
     try {

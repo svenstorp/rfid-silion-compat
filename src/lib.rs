@@ -73,7 +73,7 @@ pub use codes::{AntennaPortsOption, CommandCode, RegionCode, StatusCode};
 pub use command::{
     AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, EmbeddedReadTagData,
     HostCommand, InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank,
-    MetadataFlags, SelectContent,
+    MetadataFlags, SelectContent, SelectMode, SelectOptionBits,
 };
 pub use error::ProtocolError;
 pub use frame::{ReaderFrame, build_host_frame, parse_reader_frame, protocol_crc16};
@@ -85,7 +85,7 @@ pub use parsers::{
     parse_current_temperature, parse_frequency_hopping_table, parse_pin_states,
     parse_protocol_configuration_value, parse_reader_configuration_value,
     parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
-    parse_tag_epc_and_meta_data, parse_version_info,
+    parse_single_tag_inventory_response, parse_tag_epc_and_meta_data, parse_version_info,
 };
 pub use session::AsyncInventorySession;
 pub use silion_reader::{AsyncInventoryMessage, SilionReader};

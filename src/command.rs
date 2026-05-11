@@ -23,6 +23,150 @@ impl SelectContent {
     }
 }
 
+/// Tag singulation/select operation mode for inventory commands.
+///
+/// These values represent the target memory bank or select operation mode as defined
+/// in the Silion protocol for Tag Inventory commands. They occupy bits 0-3 of the
+/// select-option field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SelectMode {
+    /// Select functionality is disabled. First tag found will be the tag operated on.
+    /// No other Tag Singulation Fields should be specified.
+    /// Note: When Select is disabled, commands do not support an access password.
+    /// Use `SelectMode::PasswordOnly` to send a password without Select Content.
+    Disabled = 0x00,
+    /// Select on the value of the EPC.
+    Epc = 0x01,
+    /// Select on contents of TID memory bank (Gen2 bank 0x02).
+    Tid = 0x02,
+    /// Select on contents of User Memory bank (Gen2 bank 0x03).
+    UserMemory = 0x03,
+    /// Select on contents of the EPC memory bank (Gen2 bank 0x01).
+    EpcBank = 0x04,
+    /// Use this option to specify an access password without performing a Select.
+    /// When this option is used, do not pass a Select Content field.
+    PasswordOnly = 0x05,
+}
+
+impl SelectMode {
+    /// Return the raw protocol value.
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// Create from the raw protocol value.
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0x00 => Some(SelectMode::Disabled),
+            0x01 => Some(SelectMode::Epc),
+            0x02 => Some(SelectMode::Tid),
+            0x03 => Some(SelectMode::UserMemory),
+            0x04 => Some(SelectMode::EpcBank),
+            0x05 => Some(SelectMode::PasswordOnly),
+            _ => None,
+        }
+    }
+}
+
+/// Select-option bits for inventory commands.
+///
+/// The select-option field (bits 0, 1, 2, 3, 5 of the option byte) controls tag
+/// singulation/select behavior. Includes the select mode plus optional flags.
+///
+/// | Mode | Value | Meaning |
+/// |------|-------|---------|
+/// | Select Mode (bits 0-2) | 0x00-0x05 | Target memory bank or operation (see [`SelectMode`]) |
+/// | Invert Flag (bit 3) | 0x08 | Invert matching: return tags that do NOT match |
+/// | Extended Data Length (bit 5) | 0x20 | Select Data Length is 2 bytes instead of 1 |
+///
+/// # Examples
+///
+/// Create a select option for EPC matching:
+/// ```
+/// use rfid_silion_compat::{SelectMode, SelectOptionBits};
+///
+/// let opts = SelectOptionBits::new(SelectMode::Epc);
+/// assert_eq!(opts.raw(), 0x01);
+/// ```
+///
+/// Create a select option with invert flag:
+/// ```
+/// use rfid_silion_compat::{SelectMode, SelectOptionBits};
+///
+/// let opts = SelectOptionBits::new(SelectMode::UserMemory)
+///     .with_invert_flag(true);
+/// assert_eq!(opts.raw(), 0x0B); // 0x03 | 0x08
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+pub struct SelectOptionBits(u8);
+
+impl SelectOptionBits {
+    /// Create with the given select mode and no additional flags.
+    pub const fn new(mode: SelectMode) -> Self {
+        Self(mode.as_u8())
+    }
+
+    /// Create from the raw protocol byte (lower bits only, 0x2F mask).
+    pub const fn from_raw(raw: u8) -> Self {
+        Self(raw & 0x2F)
+    }
+
+    /// Return the raw protocol byte (includes all select-option bits).
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
+
+    /// Return the select mode (bits 0-2, values 0x00-0x05).
+    pub const fn mode(self) -> Option<SelectMode> {
+        SelectMode::from_u8(self.0 & 0x0F)
+    }
+
+    /// Return whether the invert flag is set (bit 3).
+    ///
+    /// When set, tags NOT matching the specified Tag Singulation Fields will be returned.
+    pub const fn invert_flag(self) -> bool {
+        (self.0 & 0x08) != 0
+    }
+
+    /// Return whether the extended data length flag is set (bit 5).
+    ///
+    /// When set, Select Data Length is 2 bytes instead of 1, allowing Select Data
+    /// to be greater than 255 bits.
+    pub const fn extended_data_length(self) -> bool {
+        (self.0 & 0x20) != 0
+    }
+
+    /// Set or clear the invert flag (bit 3).
+    pub const fn with_invert_flag(self, en: bool) -> Self {
+        Self(if en { self.0 | 0x08 } else { self.0 & !0x08 })
+    }
+
+    /// Set or clear the extended data length flag (bit 5).
+    pub const fn with_extended_data_length(self, en: bool) -> Self {
+        Self(if en { self.0 | 0x20 } else { self.0 & !0x20 })
+    }
+}
+
+impl From<SelectMode> for SelectOptionBits {
+    fn from(mode: SelectMode) -> Self {
+        Self::new(mode)
+    }
+}
+
+impl From<u8> for SelectOptionBits {
+    fn from(value: u8) -> Self {
+        Self::from_raw(value)
+    }
+}
+
+impl From<SelectOptionBits> for u8 {
+    fn from(value: SelectOptionBits) -> Self {
+        value.raw()
+    }
+}
+
 /// Option byte used by inventory commands (for example `0x22` and async start `0xAA48`).
 ///
 /// Lower bits include select-option flags documented under Tag Inventory
@@ -49,6 +193,24 @@ impl InventoryOption {
     /// Return select-option bits (mask `0x2F`) as documented.
     pub const fn select_option_bits(self) -> u8 {
         self.0 & 0x2F
+    }
+
+    /// Return whether Single Tag Inventory metadata mode is enabled (bit 4 / `0x10`).
+    ///
+    /// For command `0x21`: when enabled, host command includes 2-byte Metadata Flags
+    /// and reader returns EPC + metadata. When disabled, command omits Metadata Flags
+    /// and reader returns EPC-only payload.
+    pub const fn single_tag_metadata_enabled(self) -> bool {
+        (self.0 & 0x10) != 0
+    }
+
+    /// Set or clear Single Tag Inventory metadata mode bit (bit 4 / `0x10`).
+    pub const fn with_single_tag_metadata(self, enabled: bool) -> Self {
+        if enabled {
+            Self(self.0 | 0x10)
+        } else {
+            Self(self.0 & !0x10)
+        }
     }
 }
 
@@ -713,13 +875,24 @@ impl HostCommand {
     /// filter fields follow the protocol option bits.
     pub fn single_tag_inventory(
         timeout_ms: u16,
-        option: u8,
+        option: InventoryOption,
         metadata_flags: Option<MetadataFlags>,
         select: Option<SelectContent>,
     ) -> Result<Vec<u8>, ProtocolError> {
+        if option.single_tag_metadata_enabled() && metadata_flags.is_none() {
+            return Err(ProtocolError::InvalidArgument(
+                "single_tag_inventory requires metadata_flags when option bit 4 (0x10) is set",
+            ));
+        }
+        if !option.single_tag_metadata_enabled() && metadata_flags.is_some() {
+            return Err(ProtocolError::InvalidArgument(
+                "single_tag_inventory must omit metadata_flags when option bit 4 (0x10) is clear",
+            ));
+        }
+
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
-        data.push(option);
+        data.push(option.raw());
         if let Some(flags) = metadata_flags {
             push_u16_be(&mut data, flags.raw());
         }

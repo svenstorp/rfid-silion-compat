@@ -2,8 +2,8 @@ use crate::async_proto::parse_async_payload_owned;
 use crate::client::{ClientError, ReaderClient};
 use crate::codes::{AntennaPortsOption, CommandCode, RegionCode};
 use crate::command::{
-    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, InventorySearchFlags,
-    MetadataFlags,
+    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, InventoryOption,
+    InventorySearchFlags, MetadataFlags, SelectContent,
 };
 use crate::error::ProtocolError;
 use crate::parsers::{
@@ -11,6 +11,7 @@ use crate::parsers::{
     RunPhase, SerialNumberInfo, TagEpcAndMetaData, VersionInfo, parse_antenna_ports_response,
     parse_available_regions, parse_current_region, parse_current_tag_protocol,
     parse_current_temperature, parse_frequency_hopping_table, parse_pin_states,
+    parse_single_tag_inventory_response,
     parse_protocol_configuration_value, parse_reader_configuration_value,
     parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
     parse_tag_epc_and_meta_data, parse_version_info,
@@ -284,6 +285,57 @@ impl<T: ReaderTransport> SilionReader<T> {
         parse_async_frame_data(&frame.data).map_err(ClientError::Protocol)
     }
 
+    /// Perform a single tag inventory read using command `0x21` (Single Tag Inventory).
+    ///
+    /// This command inventories one tag within the specified timeout and returns the
+    /// parsed tag data with requested metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Maximum time to wait for a tag response in milliseconds
+    /// * `option` - Inventory option flags (see [`InventoryOption`])
+    /// * `metadata_flags` - Which metadata fields to include in the response
+    /// * `select_content` - Optional tag singulation/select rule
+    ///
+    /// Returns the tag EPC and metadata, or an error if no tag is found or timeout occurs.
+    pub async fn single_tag_inventory(
+        &mut self,
+        timeout_ms: u16,
+        option: InventoryOption,
+        metadata_flags: MetadataFlags,
+        select_content: Option<SelectContent>,
+    ) -> Result<TagEpcAndMetaData, ClientError<T::Error>> {
+        // `0x21` requires option bit 4 (`0x10`) whenever Metadata Flags are present.
+        let option = option.with_single_tag_metadata(true);
+
+        let packet = crate::command::HostCommand::single_tag_inventory(
+            timeout_ms,
+            option,
+            Some(metadata_flags),
+            select_content,
+        )
+        .map_err(ClientError::Protocol)?;
+
+        let frame = self.client.transact_frame(&packet).await?;
+        if frame.command != CommandCode::SingleTagInventory as u8 {
+            return Err(ClientError::UnexpectedResponseCommand {
+                expected: CommandCode::SingleTagInventory as u8,
+                actual: frame.command,
+            });
+        }
+        if frame.status_raw != 0x0000 {
+            return Err(ClientError::ReaderStatus {
+                status_raw: frame.status_raw,
+                status: frame.status,
+            });
+        }
+
+        let (_response_metadata_flags, tag) =
+            parse_single_tag_inventory_response(option.raw(), &frame.data)
+                .map_err(ClientError::Protocol)?;
+        Ok(tag)
+    }
+
     /// Run command `0x65` (Get Frequency Hopping table form).
     pub async fn get_frequency_hopping_table(&mut self) -> Result<Vec<u32>, ClientError<T::Error>> {
         let frame = self
@@ -393,7 +445,7 @@ mod tests {
     use super::SilionReader;
     use crate::codes::CommandCode;
     use crate::test_support::{MockInteraction, MockTransport, reply_frame};
-    use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode};
+    use crate::{AsyncInventoryMessage, InventoryOption, InventorySearchFlags, RegionCode};
 
     #[test]
     fn get_version_and_region() {
@@ -530,5 +582,47 @@ mod tests {
             tag_obj.get("tagCrc").is_some(),
             "tag.tagCrc should be present"
         );
+    }
+
+    #[test]
+    fn single_tag_inventory_success() {
+        use crate::command::MetadataFlags;
+
+        // Construct `0x21` response data in metadata mode:
+        // Option (1) + MetadataFlags (2) + EPC ID + Tag CRC
+        let mut response_data = Vec::new();
+
+        // Option (bit 4 set: metadata mode)
+        response_data.push(0x10);
+        // MetadataFlags (none)
+        response_data.extend_from_slice(&0x0000u16.to_be_bytes());
+
+        // EPC ID: 6 bytes
+        response_data.extend_from_slice(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+
+        // Tag CRC: 0x1234
+        response_data.extend_from_slice(&0x1234u16.to_be_bytes());
+
+        let transport = MockTransport::from_replies(vec![reply_frame(
+            CommandCode::SingleTagInventory as u8,
+            0x0000,
+            &response_data,
+        )]);
+
+        let mut reader = SilionReader::new(transport);
+        let tag = futures::executor::block_on(reader.single_tag_inventory(
+            5000, // 5 second timeout
+            InventoryOption::default(), // option
+            MetadataFlags::from_raw(0x0000), // no metadata fields
+            None,
+        ))
+        .expect("single tag inventory should succeed");
+
+        assert_eq!(tag.pc_word, 0x0000);
+        assert_eq!(tag.epc_bit_length, 48);
+        assert_eq!(tag.epc_id, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
+        assert_eq!(tag.tag_crc, 0x1234);
+        assert_eq!(tag.read_count, None); // Not requested
+        assert_eq!(tag.rssi_dbm, None); // Not requested
     }
 }
