@@ -40,7 +40,7 @@
         gap: 8px;
         margin-bottom: 12px;
       }
-      input, button {
+      input, select, button {
         background: #0f141b;
         color: var(--text);
         border: 1px solid var(--border);
@@ -109,6 +109,16 @@
         <hr style="border: 1px solid var(--border); margin: 12px 0;" />
         <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Region</div>
         <div class="row">
+          <label>
+            Region:
+            <select id="regionName">
+              <option value="NorthAmerica">NorthAmerica (0x01)</option>
+              <option value="China1">China1 (0x06)</option>
+              <option value="Europe" selected>Europe (0x08)</option>
+              <option value="China2">China2 (0x0A)</option>
+              <option value="FullFrequencyBand">FullFrequencyBand (0xFF)</option>
+            </select>
+          </label>
           <button id="getCurrentRegion">Get Region</button>
           <button id="setCurrentRegion">Set Region</button>
           <button id="getAvailableRegions">List Regions</button>

@@ -34,6 +34,32 @@ fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
         .map_err(|e| JsValue::from_str(&format!("serialization error: {e}")))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RegionCodeJs {
+    name: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryOptionJs {
+    select_option_bits: u8,
+    single_tag_metadata_enabled: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MetadataFlagsJs {
+    read_count: bool,
+    rssi: bool,
+    antenna_id: bool,
+    frequency: bool,
+    timestamp: bool,
+    rfu: bool,
+    protocol_id: bool,
+    data_length: bool,
+}
+
 fn parse_select_content(value: JsValue) -> Result<SelectContent, JsValue> {
     if value.is_null() || value.is_undefined() || !value.is_object() {
         return Err(js_error(
@@ -104,6 +130,147 @@ impl TryFrom<RunPhase> for JsValue {
     fn try_from(value: RunPhase) -> Result<Self, Self::Error> {
         to_js_value(&value)
     }
+}
+
+impl TryFrom<RegionCode> for JsValue {
+    type Error = JsValue;
+
+    fn try_from(value: RegionCode) -> Result<Self, Self::Error> {
+        let name = match value {
+            RegionCode::NorthAmerica => "NorthAmerica",
+            RegionCode::China1 => "China1",
+            RegionCode::Europe => "Europe",
+            RegionCode::China2 => "China2",
+            RegionCode::FullFrequencyBand => "FullFrequencyBand",
+        };
+        to_js_value(&RegionCodeJs { name })
+    }
+}
+
+impl TryFrom<InventoryOption> for JsValue {
+    type Error = JsValue;
+
+    fn try_from(value: InventoryOption) -> Result<Self, Self::Error> {
+        to_js_value(&InventoryOptionJs {
+            select_option_bits: value.select_option_bits(),
+            single_tag_metadata_enabled: value.single_tag_metadata_enabled(),
+        })
+    }
+}
+
+impl TryFrom<MetadataFlags> for JsValue {
+    type Error = JsValue;
+
+    fn try_from(value: MetadataFlags) -> Result<Self, Self::Error> {
+        to_js_value(&MetadataFlagsJs {
+            read_count: value.read_count(),
+            rssi: value.rssi(),
+            antenna_id: value.antenna_id(),
+            frequency: value.frequency(),
+            timestamp: value.timestamp(),
+            rfu: value.rfu(),
+            protocol_id: value.protocol_id(),
+            data_length: value.data_length(),
+        })
+    }
+}
+
+fn parse_inventory_option(value: JsValue) -> Result<InventoryOption, JsValue> {
+    if value.is_object() {
+        let mut raw = 0u8;
+
+        let select_option_bits_value =
+            Reflect::get(&value, &JsValue::from_str("selectOptionBits"))
+            .map_err(|_| js_error("option.selectOptionBits is invalid"))?;
+        if !select_option_bits_value.is_undefined() && !select_option_bits_value.is_null() {
+            let select_option_bits = select_option_bits_value
+                .as_f64()
+                .ok_or_else(|| js_error("option.selectOptionBits must be a number"))?;
+            if !(0.0..=0x2F as f64).contains(&select_option_bits)
+                || select_option_bits.fract() != 0.0
+            {
+                return Err(js_error(
+                    "option.selectOptionBits must be an integer in 0..=47",
+                ));
+            }
+            raw |= (select_option_bits as u8) & 0x2F;
+        }
+
+        let single_tag_metadata_enabled_value =
+            Reflect::get(&value, &JsValue::from_str("singleTagMetadataEnabled"))
+                .map_err(|_| js_error("option.singleTagMetadataEnabled is invalid"))?;
+        if !single_tag_metadata_enabled_value.is_undefined()
+            && !single_tag_metadata_enabled_value.is_null()
+        {
+            let enabled = single_tag_metadata_enabled_value
+                .as_bool()
+                .ok_or_else(|| js_error("option.singleTagMetadataEnabled must be a boolean"))?;
+            if enabled {
+                raw |= 0x10;
+            }
+        }
+
+        return Ok(InventoryOption::from_raw(raw));
+    }
+
+    Err(js_error("option must be an object with typed fields"))
+}
+
+fn parse_metadata_flags(value: JsValue) -> Result<MetadataFlags, JsValue> {
+    if value.is_object() {
+        let mut flags = MetadataFlags::NONE;
+        for (name, setter) in [
+            (
+                "readCount",
+                MetadataFlags::with_read_count as fn(MetadataFlags, bool) -> MetadataFlags,
+            ),
+            ("rssi", MetadataFlags::with_rssi),
+            ("antennaId", MetadataFlags::with_antenna_id),
+            ("frequency", MetadataFlags::with_frequency),
+            ("timestamp", MetadataFlags::with_timestamp),
+            ("rfu", MetadataFlags::with_rfu),
+            ("protocolId", MetadataFlags::with_protocol_id),
+            ("dataLength", MetadataFlags::with_data_length),
+        ] {
+            let field_value = Reflect::get(&value, &JsValue::from_str(name))
+                .map_err(|_| js_error("metadataFlags field is invalid"))?;
+            if !field_value.is_undefined() && !field_value.is_null() {
+                let enabled = field_value
+                    .as_bool()
+                    .ok_or_else(|| js_error("metadataFlags fields must be booleans"))?;
+                flags = setter(flags, enabled);
+            }
+        }
+
+        return Ok(flags);
+    }
+
+    Err(js_error(
+        "metadataFlags must be an object with typed boolean fields",
+    ))
+}
+
+fn parse_region_code(value: JsValue) -> Result<RegionCode, JsValue> {
+    if value.is_object() {
+        let name_value = Reflect::get(&value, &JsValue::from_str("name"))
+            .map_err(|_| js_error("regionCode.name is invalid"))?;
+        if !name_value.is_undefined() && !name_value.is_null() {
+            let name = name_value
+                .as_string()
+                .ok_or_else(|| js_error("regionCode.name must be a string"))?;
+            let region = match name.as_str() {
+                "NorthAmerica" => RegionCode::NorthAmerica,
+                "China1" => RegionCode::China1,
+                "Europe" => RegionCode::Europe,
+                "China2" => RegionCode::China2,
+                "FullFrequencyBand" => RegionCode::FullFrequencyBand,
+                _ => return Err(js_error("unknown regionCode.name")),
+            };
+            return Ok(region);
+        }
+    }
+
+    Err(js_error("regionCode must be an object with { name }"))
 }
 
 fn js_value_to_bytes(data: JsValue) -> Result<Vec<u8>, JsValue> {
@@ -232,30 +399,55 @@ impl WasmSilionReader {
         reader.get_current_tag_protocol().await.map_err(debug_error)
     }
 
-    /// Run command `0x97` (Set Current Region) using a raw region code byte.
+    /// Run command `0x97` (Set Current Region).
+    ///
+    /// Accepts an object with `{ name }`.
+    ///
+    /// JavaScript examples:
+    ///
+    /// ```javascript
+    /// await reader.setCurrentRegion({ name: "Europe" });
+    /// ```
     #[wasm_bindgen(js_name = setCurrentRegion)]
-    pub async fn set_current_region(&self, region_code: u8) -> Result<(), JsValue> {
+    pub async fn set_current_region(&self, region_code: JsValue) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        let region =
-            RegionCode::from_u8(region_code).ok_or_else(|| js_error("unknown region code"))?;
+        let region = parse_region_code(region_code)?;
         reader.set_current_region(region).await.map_err(debug_error)
     }
 
-    /// Run command `0x67` (Get Current Region) and return the raw region code.
+    /// Run command `0x67` (Get Current Region) and return a typed region object.
+    ///
+    /// JavaScript return shape:
+    ///
+    /// ```javascript
+    /// const region = await reader.getCurrentRegion();
+    /// // { name: "Europe" }
+    /// ```
     #[wasm_bindgen(js_name = getCurrentRegion)]
-    pub async fn get_current_region(&self) -> Result<u8, JsValue> {
+    pub async fn get_current_region(&self) -> Result<JsValue, JsValue> {
         let mut reader = self.reader_mut()?;
         let region = reader.get_current_region().await.map_err(debug_error)?;
-        Ok(region.as_u8())
+        region.try_into()
     }
 
-    /// Run command `0x71` (Get Available Regions) and return region code bytes.
+    /// Run command `0x71` (Get Available Regions) and return typed region objects.
+    ///
+    /// JavaScript return shape:
+    ///
+    /// ```javascript
+    /// const regions = await reader.getAvailableRegions();
+    /// // [ { name: "NorthAmerica" }, { name: "Europe" }, ... ]
+    /// ```
     #[wasm_bindgen(js_name = getAvailableRegions)]
-    pub async fn get_available_regions(&self) -> Result<Uint8Array, JsValue> {
+    pub async fn get_available_regions(&self) -> Result<JsValue, JsValue> {
         let mut reader = self.reader_mut()?;
         let regions = reader.get_available_regions().await.map_err(debug_error)?;
-        let out: Vec<u8> = regions.into_iter().map(|r| r.as_u8()).collect();
-        Ok(Uint8Array::from(out.as_slice()))
+        let out = Array::new();
+        for region in regions {
+            let js_region: JsValue = region.try_into()?;
+            out.push(&js_region);
+        }
+        Ok(out.into())
     }
 
     /// Run command `0x72` (Get Current Temperature).
@@ -404,18 +596,31 @@ impl WasmSilionReader {
     /// # Arguments
     ///
     /// * `timeout_ms` - Timeout in milliseconds
-    /// * `option_raw` - Inventory option as raw byte (corresponds to [`InventoryOption`] values)
-    /// * `metadata_flags_raw` - Metadata flags as raw u16 (corresponds to [`MetadataFlags`] values)
+    /// * `option` - Inventory option typed object
+    /// * `metadata_flags` - Metadata flags typed object
     /// * `select_content` - Optional object `{ addressBits, bitLen, data }`, or `undefined`
+    ///
+    /// JavaScript examples:
+    ///
+    /// ```javascript
+    /// // Typed objects
+    /// await reader.singleTagInventory(
+    ///   1000,
+    ///   { selectOptionBits: 0x01, singleTagMetadataEnabled: true },
+    ///   { rssi: true, antennaId: true, timestamp: true },
+    ///   { addressBits: 32, bitLen: 96, data: new Uint8Array(12) },
+    /// );
+    /// ```
     #[wasm_bindgen(js_name = singleTagInventory)]
     pub async fn single_tag_inventory(
         &self,
         timeout_ms: u16,
-        option_raw: u8,
-        metadata_flags_raw: u16,
+        option: JsValue,
+        metadata_flags: JsValue,
         select_content: Option<JsValue>,
     ) -> Result<JsValue, JsValue> {
-        let option = InventoryOption::from_raw(option_raw);
+        let option = parse_inventory_option(option)?;
+        let metadata_flags = parse_metadata_flags(metadata_flags)?;
         let select_bits = SelectOptionBits::from_raw(option.select_option_bits());
         if select_bits.extended_data_length() {
             return Err(js_error(
@@ -464,19 +669,14 @@ impl WasmSilionReader {
             }
             None => {
                 return Err(js_error(
-                    "unsupported select mode in option_raw; expected SelectMode 0x00..0x05",
+                    "unsupported select mode in option; expected SelectMode 0x00..0x05",
                 ));
             }
         }
 
         let mut reader = self.reader_mut()?;
         let tag = reader
-            .single_tag_inventory(
-                timeout_ms,
-                option,
-                MetadataFlags::from_raw(metadata_flags_raw),
-                select,
-            )
+            .single_tag_inventory(timeout_ms, option, metadata_flags, select)
             .await
             .map_err(debug_error)?;
         to_js_value(&tag)

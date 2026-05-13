@@ -121,10 +121,18 @@ async function main(): Promise<void> {
   req("singleTag").addEventListener("click", async () => {
     if (!reader) return log("not connected");
     try {
-      // Option 0x10: metadata enabled + SelectMode::Disabled
-      // Metadata flags 0x0056: rssi(0x0002) + antenna_id(0x0004) + timestamp(0x0010) + protocol_id(0x0040)
-      // For other SelectMode values: 0x01=Epc, 0x02=Tid, 0x03=UserMemory, 0x04=EpcBank, 0x05=PasswordOnly
-      const tag = await reader.singleTagInventory(5000, 0x10, 0x0056);
+      const option = {
+        // SelectMode::Disabled + metadata enabled
+        selectOptionBits: 0x00,
+        singleTagMetadataEnabled: true,
+      };
+      const metadataFlags = {
+        rssi: true,
+        antennaId: true,
+        timestamp: true,
+        protocolId: true,
+      };
+      const tag = await reader.singleTagInventory(5000, option, metadataFlags);
       const epc = bytesToHex(tag.epcId);
       log(`SINGLE TAG: epc=${epc} rssi=${tag.rssiDbm ?? "n/a"} ant=${tag.antennaId ?? "n/a"}`);
     } catch (err) {
@@ -224,11 +232,9 @@ async function main(): Promise<void> {
   req("setCurrentRegion").addEventListener("click", async () => {
     if (!reader) return log("not connected");
     try {
-      const codeStr = prompt("Enter region code (0=NorthAmerica, 1=Europe, ...):");
-      if (codeStr === null) return;
-      const code = Number(codeStr);
-      await reader.setCurrentRegion(code);
-      log(`set region to code=${code}`);
+      const regionName = (req("regionName") as HTMLSelectElement).value;
+      await reader.setCurrentRegion({ name: regionName });
+      log(`set region to name=${regionName}`);
     } catch (err) {
       log(`setCurrentRegion failed: ${err}`);
     }
