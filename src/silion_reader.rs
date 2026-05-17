@@ -3,8 +3,8 @@ use crate::client::{ClientError, ReaderClient};
 use crate::codes::{AntennaPortsOption, CommandCode, RegionCode};
 use crate::command::{
     AntennaPortsConfiguration, AsyncInventoryStartData as CommandAsyncInventoryStartData,
-    AsyncSubcommandCode, InventoryOption, InventorySearchFlags, MemBank, MetadataFlags, SelectContent,
-    SelectMode, SelectOptionBits,
+    AsyncSubcommandCode, InventoryOption, InventorySearchFlags, MemBank, MetadataFlags,
+    SelectContent, SelectMode, SelectOptionBits,
 };
 use crate::error::ProtocolError;
 use crate::parsers::{
@@ -177,7 +177,9 @@ impl SelectOption {
                     data: select_data,
                 }),
             ),
-            SelectOption::PasswordOnly => (SelectOptionBits::new(SelectMode::PasswordOnly).into(), None),
+            SelectOption::PasswordOnly => {
+                (SelectOptionBits::new(SelectMode::PasswordOnly).into(), None)
+            }
         }
     }
 }

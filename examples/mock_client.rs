@@ -2,8 +2,9 @@ use std::collections::VecDeque;
 use std::fmt;
 
 use rfid_silion_compat::{
-    ClientError, codes::CommandCode, command::HostCommand, ReaderClient, ReaderTransport, RegionCode,
-    parsers::parse_current_region, parsers::parse_version_info, frame::protocol_crc16,
+    ClientError, ReaderClient, ReaderTransport, RegionCode, codes::CommandCode,
+    command::HostCommand, frame::protocol_crc16, parsers::parse_current_region,
+    parsers::parse_version_info,
 };
 
 #[derive(Debug)]

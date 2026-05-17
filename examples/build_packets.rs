@@ -1,4 +1,4 @@
-use rfid_silion_compat::{command::HostCommand, MemBank, RegionCode, command::SelectContent};
+use rfid_silion_compat::{MemBank, RegionCode, command::HostCommand, command::SelectContent};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let get_version = HostCommand::get_version()?;

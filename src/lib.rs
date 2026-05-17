@@ -92,12 +92,12 @@ pub use parsers::{
     ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime, RunPhase,
     SerialNumberInfo, TagEpcAndMetaData, VersionInfo,
 };
+#[cfg(feature = "serial")]
+pub use serial::SerialTransport;
 pub use session::AsyncInventorySession;
 pub use silion_reader::{
     AsyncInventoryMessage, ReaderAsyncInventoryStartData, SelectOption, SilionReader,
 };
-#[cfg(feature = "serial")]
-pub use serial::SerialTransport;
 pub use transport::ReaderTransport;
 
 #[cfg(test)]

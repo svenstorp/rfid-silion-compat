@@ -14,8 +14,7 @@ use crate::silion_reader::{ReaderAsyncInventoryStartData, SelectOption, SilionRe
 use crate::web_serial::WebSerialTransport;
 use crate::{
     AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPower,
-    AsyncInventoryMessage, InventorySearchFlags, MemBank, MetadataFlags,
-    RegionCode, RunPhase,
+    AsyncInventoryMessage, InventorySearchFlags, MemBank, MetadataFlags, RegionCode, RunPhase,
 };
 
 fn js_error(msg: &str) -> JsValue {
