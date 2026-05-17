@@ -3,12 +3,11 @@
 Async Rust reader library for Silion RFID reader protocol communication.
 
 This crate provides:
-- Low-level packet build/parse helpers
-- A transport-agnostic async client
 - A high-level reader API (`SilionReader`) for common reader operations
 - Async inventory session support
 - Optional native serial transport (`tokio-serial`)
 - Optional browser Web Serial + wasm-bindgen JS bindings
+- Supporting low-level protocol modules (`command`, `parsers`, `frame`) for advanced use
 
 The protocol implementation follows Silion reader protocol docs:
 https://en.silion.com.cn/En/doc_center/ModuleAPI_Docs/Communication_Protocol_Doc/html/Protocol_Introduction.html
@@ -47,6 +46,14 @@ Enable native serial support when needed:
 
 ```bash
 cargo add rfid-silion-compat --features serial
+```
+
+Or directly in `Cargo.toml`:
+
+```toml
+[dependencies]
+rfid-silion-compat = { version = "*", features = ["serial"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
 ## Quick Start
@@ -91,6 +98,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Build with the `serial` feature enabled.
+
+For API-oriented documentation, see crate-level rustdoc in [src/lib.rs](src/lib.rs)
+and module docs in [src/silion_reader.rs](src/silion_reader.rs), [src/command.rs](src/command.rs),
+[src/parsers.rs](src/parsers.rs), and [src/frame.rs](src/frame.rs).
 
 ## Browser and Web Serial
 
@@ -142,7 +153,7 @@ cargo check --target wasm32-unknown-unknown --features web-serial
 ## Project Layout
 
 - [src/lib.rs](src/lib.rs): exports and crate-level docs
-- [src/reader.rs](src/reader.rs): high-level async reader API
+- [src/silion_reader.rs](src/silion_reader.rs): high-level async reader API
 - [src/client.rs](src/client.rs): transport-level async client
 - [src/session.rs](src/session.rs): async inventory session API
 - [src/serial.rs](src/serial.rs): native serial transport (`serial` feature)

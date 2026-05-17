@@ -9,25 +9,26 @@
 //! This crate is centered around the high-level [`SilionReader`] API for common
 //! reader operations (version, region, inventory, and tag access).
 //!
+//! See the project README for installation and feature setup.
+//!
+//! ## API Entry Points
+//!
+//! - [`SilionReader`]: high-level async reader operations.
+//! - [`ReaderAsyncInventoryStartData`]: typed async inventory start configuration.
+//! - [`SelectOption`]: high-level select/singulation input for inventory and access.
+//! - [`AsyncInventoryMessage`]: typed pushed messages from async inventory.
+//!
 //! ## Typical Workflow
 //!
 //! 1. Create a transport (native serial or web serial).
 //! 2. Construct [`SilionReader`] with that transport.
 //! 3. Call typed async methods and work with parsed return values.
 //!
-//! ## Enable Native Serial Support
-//!
-//! Add this to your `Cargo.toml` to enable the `serial` transport module:
-//!
-//! ```toml
-//! [dependencies]
-//! rfid-silion-compat = { version = "*", features = ["serial"] }
-//! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-//! ```
-//!
-//! ## Simple Example (native serial)
+//! ## Example: Single-Tag Inventory (native serial)
 //!
 //! ```rust,ignore
+//! use rfid_silion_compat::MetadataFlags;
+//! use rfid_silion_compat::SelectOption;
 //! use rfid_silion_compat::SerialTransport;
 //! use rfid_silion_compat::SilionReader;
 //!
@@ -36,11 +37,13 @@
 //! let transport = SerialTransport::open("/dev/ttyUSB0", 115_200)?;
 //! let mut reader = SilionReader::new(transport);
 //!
-//! let version = reader.get_version().await?;
-//! println!("Firmware version: {:02X?}", version.firmware_version);
+//! let metadata = MetadataFlags::default().with_rssi(true).with_antenna_id(true);
+//! let tag = reader
+//!     .single_tag_inventory(1000, SelectOption::Disabled, Some(metadata))
+//!     .await?;
 //!
-//! let region = reader.get_current_region().await?;
-//! println!("Current region: {region}");
+//! println!("EPC: {:02X?}", tag.epc_id);
+//! println!("RSSI dBm: {:?}", tag.rssi_dbm);
 //! Ok(())
 //! }
 //! ```
