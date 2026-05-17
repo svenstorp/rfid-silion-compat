@@ -69,7 +69,7 @@ extern "C" {
 /// This transport is only available on wasm32 targets with the `web-serial`
 /// crate feature enabled.
 ///
-/// Unlike [`crate::serial::SerialTransport`], this transport is fully
+/// Unlike [`crate::SerialTransport`], this transport is fully
 /// asynchronous because Web Serial I/O is Promise based.
 pub struct WebSerialTransport {
     handle: JsValue,

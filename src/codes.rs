@@ -1,3 +1,8 @@
+//! Protocol code definitions used across command building and response parsing.
+//!
+//! This module groups enums and constants for command codes, status codes,
+//! region identifiers, and antenna-related options.
+
 use std::fmt;
 
 /// Command codes defined by the Silion protocol documentation.

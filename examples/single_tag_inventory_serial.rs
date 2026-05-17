@@ -1,7 +1,5 @@
 #[cfg(feature = "serial")]
-use rfid_silion_compat::serial::SerialTransport;
-#[cfg(feature = "serial")]
-use rfid_silion_compat::{InventoryOption, MetadataFlags, SilionReader};
+use rfid_silion_compat::{MemBank, MetadataFlags, SelectOption, SerialTransport, SilionReader};
 #[cfg(feature = "serial")]
 use std::env;
 
@@ -44,23 +42,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Running SingleTagInventory (0x21)...");
     let tag = reader
-        .single_tag_inventory(
-            timeout_ms,
-            InventoryOption::default().with_single_tag_metadata(true),
-            metadata,
-            None,
-        )
+        .single_tag_inventory(timeout_ms, SelectOption::Disabled, Some(metadata))
         .await?;
 
     println!("Tag found:");
     println!("  EPC: {}", to_hex(&tag.epc_id));
-    println!("  EPC bits: {}", tag.epc_bit_length);
-    println!("  PC: 0x{:04X}", tag.pc_word);
+    println!("  EPC bits: {}", tag.epc_bit_length.unwrap_or(0));
+    println!("  PC: 0x{:04X}", tag.pc_word.unwrap_or(0));
     println!("  CRC: 0x{:04X}", tag.tag_crc);
     println!("  RSSI dBm: {:?}", tag.rssi_dbm);
     println!("  Antenna ID: {:?}", tag.antenna_id);
     println!("  Timestamp ms: {:?}", tag.timestamp_ms);
     println!("  Protocol ID: {:?}", tag.protocol_id);
+
+    // Read out TID data as well
+    let tid = reader
+        .read_tag_data(
+            5000,
+            SelectOption::Epc {
+                select_length_bits: (tag.epc_id.len() * 8) as u16,
+                select_data: tag.epc_id.clone(),
+                invert: false,
+            },
+            None,
+            MemBank::Tid,
+            0,
+            6,
+        )
+        .await?;
+    if let Some(tag_data) = tid.tag_data {
+        println!("TID: {}", to_hex(&tag_data));
+    } else {
+        println!("TID read failed or returned no data.");
+    }
 
     Ok(())
 }

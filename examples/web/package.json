@@ -6,13 +6,15 @@
     "check": "tsc --noEmit",
     "clean": "rm -rf dist pkg",
     "build:wasm": "cd ../.. && wasm-pack build --target web --out-dir examples/web/pkg -- --features web-serial && cd examples/web",
-    "build:ts": "tsc",
-    "build:dist": "mkdir -p dist && cp index.html dist/ && cp -r pkg dist/",
-    "build": "npm run build:wasm && npm run build:ts && npm run build:dist",
-    "serve": "cd dist && python3 -m http.server 8080",
+    "build": "pnpm build:wasm && pnpm exec vite build",
+    "dev": "pnpm build:wasm && pnpm exec vite",
+    "preview": "pnpm exec vite preview",
+    "serve": "pnpm exec vite preview --port 8080",
     "serve:https": "cd dist && python3 << 'EOF'\nimport http.server\nimport ssl\nimport os\n\nserver = http.server.HTTPServer(('localhost', 8443), http.server.SimpleHTTPRequestHandler)\ncontext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)\ncontext.load_cert_chain('../cert.pem', '../key.pem')\nserver.socket = context.wrap_socket(server.socket, server_side=True)\nprint('Serving on https://localhost:8443')\nserver.serve_forever()\nEOF"
   },
   "devDependencies": {
-    "typescript": "^5"
+    "terser": "^5.47.1",
+    "typescript": "^5",
+    "vite": "^5"
   }
 }

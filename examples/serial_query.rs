@@ -1,11 +1,9 @@
 #[cfg(feature = "serial")]
-use rfid_silion_compat::serial::SerialTransport;
-#[cfg(feature = "serial")]
 use rfid_silion_compat::{
     AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPortsResponse, AntennaPower,
-    AsyncInventoryMessage, AsyncInventoryStartData, EmbeddedReadTagData,
-    InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank, MetadataFlags,
-    SilionReader,
+    AsyncInventoryMessage, EmbeddedReadTagData, InventoryEmbeddedCommandContent,
+    InventorySearchFlags, MemBank, MetadataFlags, ReaderAsyncInventoryStartData, SelectOption,
+    SerialTransport, SilionReader,
 };
 #[cfg(feature = "serial")]
 use std::env;
@@ -123,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_embedded_command(true)
         .with_async_rest_ratio_steps(4)?;
 
-    let start_data = AsyncInventoryStartData {
+    let start_data = ReaderAsyncInventoryStartData {
         metadata_flags: MetadataFlags::default()
             .with_read_count(true)
             .with_rssi(true)
@@ -132,10 +130,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_timestamp(true)
             .with_data_length(true)
             .with_protocol_id(true),
-        option: InventoryOption::default(),
+        select_option: SelectOption::Disabled,
         search_flags,
         access_password: None,
-        select_content: None,
         embedded_command_content: Some(InventoryEmbeddedCommandContent::ReadTagData(
             EmbeddedReadTagData {
                 read_membank: MemBank::Tid,
@@ -159,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tag,
             } => {
                 println!(
-                    "  Tag\n    metadata_flags: 0x{flags:04X}\n    read_count: {read_count:?}\n    rssi_dbm: {rssi:?}\n    antenna_id: {antenna_id:?}\n    frequency_khz: {frequency:?}\n    timestamp_ms: {timestamp:?}\n    rfu: {rfu:?}\n    protocol_id: {protocol_id:?}\n    tag_data_bit_length: {tag_data_bits:?}\n    tag_data: {tag_data:02X?}\n    epc_bit_length: {epc_bits}\n    pc_word: 0x{pc:04X}\n    epc_id: {epc:02X?}\n    tag_crc: 0x{crc:04X}",
+                    "  Tag\n    metadata_flags: 0x{flags:04X}\n    read_count: {read_count:?}\n    rssi_dbm: {rssi:?}\n    antenna_id: {antenna_id:?}\n    frequency_khz: {frequency:?}\n    timestamp_ms: {timestamp:?}\n    rfu: {rfu:?}\n    protocol_id: {protocol_id:?}\n    tag_data_bit_length: {tag_data_bits:?}\n    tag_data: {tag_data:02X?}\n    epc_bit_length: {epc_bits:?}\n    pc_word: {pc:?}\n    epc_id: {epc:02X?}\n    tag_crc: 0x{crc:04X}",
                     flags = metadata_flags.raw(),
                     read_count = tag.read_count,
                     rssi = tag.rssi_dbm,

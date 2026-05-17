@@ -72,7 +72,7 @@ mod tests {
     use crate::codes::CommandCode;
     use crate::command::AsyncSubcommandCode;
     use crate::test_support::{MockInteraction, MockTransport, reply_frame};
-    use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode, subcommand_crc};
+        use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode, async_proto::subcommand_crc};
 
     #[test]
     fn recv_heartbeat_message() {

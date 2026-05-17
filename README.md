@@ -72,7 +72,7 @@ cargo run --features serial --example serial_query -- /dev/ttyUSB0 115200
 ### Minimal Rust API usage
 
 ```rust
-use rfid_silion_compat::serial::SerialTransport;
+use rfid_silion_compat::SerialTransport;
 use rfid_silion_compat::SilionReader;
 
 #[tokio::main]

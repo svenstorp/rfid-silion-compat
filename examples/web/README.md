@@ -1,20 +1,20 @@
 # Browser Example (HTML + TypeScript)
 
-This example uses the wasm-bindgen JavaScript library output from this crate. The UI is written in TypeScript for type safety and builds all artifacts into a `dist/` folder that the web server serves from.
+This example uses the wasm-bindgen JavaScript library output from this crate. The UI is written in TypeScript for type safety and is bundled using Vite for proper module resolution. All artifacts are built into a `dist/` folder that the web server serves from.
 
 ## Quick Start
 
 From the `examples/web` directory:
 
 ```bash
-# Install npm dependencies
-npm install
+# Install pnpm dependencies
+pnpm install
 
 # Build all artifacts into dist/
-npm run build
+pnpm build
 
 # Start the HTTPS dev server
-npm run serve:https
+pnpm run serve:https
 ```
 
 Then open `https://localhost:8443` in a browser.
@@ -22,50 +22,51 @@ Then open `https://localhost:8443` in a browser.
 ## Project Structure
 
 - **Source files:**
-  - `main.ts` — TypeScript UI code (type-checked)
-  - `index.html` — HTML template
-  - `tsconfig.json` — TypeScript configuration
-  - `package.json` — npm scripts and dependencies
+  - `main.ts` — TypeScript UI code (type-checked, bundled by Vite)
+  - `index.html` — HTML template with Vite entry point
+  - `tsconfig.json` — TypeScript configuration (configured for bundler mode)
+  - `vite.config.ts` — Vite configuration
+  - `package.json` — pnpm scripts and dependencies
 
 - **Build output (in `dist/`):**
-  - `main.js` — Compiled TypeScript
+  - `main.js` — Bundled and minified JavaScript (compiled from TypeScript)
   - `index.html` — Copied from source
   - `pkg/` — WASM package (bindings + WebAssembly binary)
 
-## Available npm Scripts
+## Available pnpm Scripts
 
 ### Building
 
-- `npm run check` — Type check only (no emit)
-- `npm run build:wasm` — Build WASM library to `pkg/`
-- `npm run build:ts` — Compile TypeScript to `dist/main.js`
-- `npm run build:dist` — Copy files to `dist/`
-- `npm run build` — Run all build steps (wasm → ts → dist)
-- `npm run clean` — Remove `dist/` and `pkg/`
+- `pnpm run check` — Type check only (no emit)
+- `pnpm build:wasm` — Build WASM library to `pkg/`
+- `pnpm build` — Build WASM and bundle TypeScript with Vite (one-shot)
+
+### Development
+
+- `pnpm run dev` — Start Vite dev server with live reload (requires initial `build:wasm`)
 
 ### Running
 
-- `npm run serve` — HTTP server on port 8080 (Web Serial won't work, HTTPS required)
-- `npm run serve:https` — HTTPS server on port 8443 (requires cert)
+- `pnpm run serve` — HTTP server on port 8080 (Web Serial won't work, HTTPS required)
+- `pnpm run serve:https` — HTTPS server on port 8443 (requires cert)
+- `pnpm run preview` — Preview production build locally
+
+### Maintenance
+
+- `pnpm run clean` — Remove `dist/` and `pkg/`
 
 ## Building Separately
-
-Build only TypeScript:
-
-```bash
-npm run build:ts
-```
 
 Build only WASM:
 
 ```bash
-npm run build:wasm
+pnpm run build:wasm
 ```
 
-Prepare dist folder:
+Use Vite dev server (after building WASM):
 
 ```bash
-npm run build:dist
+pnpm run dev
 ```
 
 ## Serving the Example
@@ -73,7 +74,7 @@ npm run build:dist
 ### HTTP (limited, Web Serial won't work)
 
 ```bash
-npm run serve
+pnpm run serve
 # Serves on http://localhost:8080 from dist/
 ```
 
@@ -82,7 +83,7 @@ Note: Web Serial API only works in secure contexts (HTTPS or certain localhost c
 ### HTTPS (recommended for development)
 
 ```bash
-npm run serve:https
+pnpm run serve:https
 # Serves on https://localhost:8443 from dist/
 ```
 
@@ -97,7 +98,7 @@ You'll see a certificate warning in your browser—this is expected and safe for
 
 ### Manual HTTPS (without npm scripts)
 
-If npm scripts don't work:
+If scripts don't work:
 
 ```bash
 cd examples/web/dist

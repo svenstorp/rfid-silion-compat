@@ -1,3 +1,8 @@
+//! Wire-frame encoding and decoding helpers.
+//!
+//! This module provides low-level packet parsing and building utilities for the
+//! Silion protocol frame format (`0xFF | len | command | ... | crc16`).
+
 use crate::codes::StatusCode;
 use crate::error::ProtocolError;
 

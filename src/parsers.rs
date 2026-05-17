@@ -1,3 +1,8 @@
+//! Response payload parsers and typed decoded data structures.
+//!
+//! Functions in this module decode raw reader response payload bytes into
+//! strongly-typed Rust values used by the high-level API.
+
 use crate::codes::{AntennaPortsOption, RegionCode};
 use crate::command::MetadataFlags;
 use crate::error::ProtocolError;
@@ -342,9 +347,9 @@ pub struct TagEpcAndMetaData {
     /// Embedded command tag data bytes (bit 7).
     pub tag_data: Option<Vec<u8>>,
     /// EPC length in bits including PC and tag CRC.
-    pub epc_bit_length: u16,
+    pub epc_bit_length: Option<u16>,
     /// PC word from EPC bank.
-    pub pc_word: u16,
+    pub pc_word: Option<u16>,
     /// EPC ID bytes.
     pub epc_id: Vec<u8>,
     /// Tag CRC from EPC bank.
@@ -710,8 +715,8 @@ pub fn parse_tag_epc_and_meta_data(
         protocol_id,
         tag_data_bit_length,
         tag_data,
-        epc_bit_length,
-        pc_word,
+        epc_bit_length: Some(epc_bit_length),
+        pc_word: Some(pc_word),
         epc_id,
         tag_crc,
     })
@@ -780,8 +785,8 @@ fn parse_single_tag_inventory_epc_only_payload(
         protocol_id: None,
         tag_data_bit_length: None,
         tag_data: None,
-        epc_bit_length: (epc_id.len() as u16) * 8,
-        pc_word: 0,
+        epc_bit_length: Some((epc_id.len() as u16) * 8),
+        pc_word: Some(0),
         epc_id,
         tag_crc,
     })
@@ -921,8 +926,8 @@ pub fn parse_single_tag_inventory_payload(
         protocol_id,
         tag_data_bit_length,
         tag_data,
-        epc_bit_length: (epc_id.len() as u16) * 8,
-        pc_word: 0,
+        epc_bit_length: Some((epc_id.len() as u16) * 8),
+        pc_word: Some(0),
         epc_id,
         tag_crc,
     })

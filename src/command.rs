@@ -1,3 +1,8 @@
+//! Command-layer protocol types and host packet builders.
+//!
+//! This module contains low-level request payload models and helpers for
+//! constructing wire packets for Silion reader commands.
+
 use crate::async_proto::{ASYNC_MARKER, ASYNC_TERMINATOR, subcommand_crc};
 use crate::codes::{AntennaPortsOption, CommandCode, RegionCode};
 use crate::error::ProtocolError;
@@ -10,15 +15,33 @@ pub struct SelectContent {
     /// Address (bits).
     pub address_bits: u32,
     /// Number of selected bits.
-    pub bit_len: u8,
+    pub bit_len: u16,
     /// Select data bytes.
     pub data: Vec<u8>,
 }
 
 impl SelectContent {
-    pub(crate) fn encode(&self, out: &mut Vec<u8>) {
-        push_u32_be(out, self.address_bits);
-        out.push(self.bit_len);
+    /// Encode the SelectContent according to the Silion protocol, using select_option_bits to determine encoding.
+    ///
+    /// - If select_option_bits.extended_data_length() is true, bit_len is encoded as u16 (big-endian), otherwise as u8.
+    /// - Data is encoded as-is.
+    /// Encode the SelectContent according to the Silion protocol, using InventoryOption to determine encoding.
+    ///
+    /// - If option.select_option_bits_struct().extended_data_length() is true, bit_len is encoded as u16 (big-endian), otherwise as u8.
+    /// - Data is encoded as-is.
+    pub(crate) fn encode_with_option(&self, out: &mut Vec<u8>, option: InventoryOption) {
+        let select_option_bits = option.select_option_bits();
+        if select_option_bits.mode() != Some(SelectMode::Epc) {
+            push_u32_be(out, self.address_bits);
+        }
+        if select_option_bits.extended_data_length() {
+            // Encode bit_len as u16 (big-endian)
+            out.push((self.bit_len >> 8) as u8);
+            out.push((self.bit_len & 0xFF) as u8);
+        } else {
+            // Encode bit_len as u8
+            out.push(self.bit_len as u8);
+        }
         out.extend_from_slice(&self.data);
     }
 }
@@ -99,7 +122,6 @@ impl SelectMode {
 /// assert_eq!(opts.raw(), 0x0B); // 0x03 | 0x08
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
 pub struct SelectOptionBits(u8);
 
 impl SelectOptionBits {
@@ -190,9 +212,9 @@ impl InventoryOption {
         self.0
     }
 
-    /// Return select-option bits (mask `0x2F`) as documented.
-    pub const fn select_option_bits(self) -> u8 {
-        self.0 & 0x2F
+    /// Return select-option bits as a SelectOptionBits struct.
+    pub const fn select_option_bits(self) -> SelectOptionBits {
+        SelectOptionBits::from_raw(self.0 & 0x2F)
     }
 
     /// Return whether Single Tag Inventory metadata mode is enabled (bit 4 / `0x10`).
@@ -217,6 +239,12 @@ impl InventoryOption {
 impl From<u8> for InventoryOption {
     fn from(value: u8) -> Self {
         Self::from_raw(value)
+    }
+}
+
+impl From<SelectOptionBits> for InventoryOption {
+    fn from(bits: SelectOptionBits) -> Self {
+        Self(bits.raw())
     }
 }
 
@@ -615,7 +643,7 @@ impl AsyncInventoryStartData {
                 + self
                     .select_content
                     .as_ref()
-                    .map(|s| 4 + 1 + s.data.len())
+                    .map(|s| 4 + 2 + s.data.len()) // worst case: 2 bytes for bit_len
                     .unwrap_or(0)
                 + self
                     .embedded_command_content
@@ -633,7 +661,7 @@ impl AsyncInventoryStartData {
         }
 
         if let Some(select) = &self.select_content {
-            select.encode(&mut data);
+            select.encode_with_option(&mut data, self.option);
         }
 
         if let Some(embedded) = &self.embedded_command_content {
@@ -897,7 +925,7 @@ impl HostCommand {
             push_u16_be(&mut data, flags.raw());
         }
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, option);
         }
         build_host_frame(CommandCode::SingleTagInventory.as_u8(), &data)
     }
@@ -942,7 +970,7 @@ impl HostCommand {
             push_u32_be(&mut data, pw);
         }
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, option);
         }
         if let Some(embedded) = embedded_command {
             embedded.encode(&mut data);
@@ -969,7 +997,7 @@ impl HostCommand {
             push_u32_be(&mut data, pw);
         }
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, option);
         }
         if let Some(embedded) = embedded_command {
             data.extend_from_slice(embedded);
@@ -1014,7 +1042,7 @@ impl HostCommand {
             push_u32_be(&mut data, pw);
         }
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
         }
         data.extend_from_slice(epc);
         build_host_frame(CommandCode::WriteTagEpc.as_u8(), &data)
@@ -1051,7 +1079,7 @@ impl HostCommand {
             push_u32_be(&mut data, pw);
         }
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
         }
         data.extend_from_slice(write_data);
         build_host_frame(CommandCode::WriteTagData.as_u8(), &data)
@@ -1075,7 +1103,7 @@ impl HostCommand {
         push_u16_be(&mut data, mask_bits);
         push_u16_be(&mut data, action_bits);
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
         }
         build_host_frame(CommandCode::LockTag.as_u8(), &data)
     }
@@ -1096,7 +1124,7 @@ impl HostCommand {
         push_u32_be(&mut data, kill_password);
         data.push(rfu);
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
         }
         build_host_frame(CommandCode::KillTag.as_u8(), &data)
     }
@@ -1130,10 +1158,13 @@ impl HostCommand {
         data.push(word_count);
         if let Some(pw) = access_password {
             push_u32_be(&mut data, pw);
+        } else {
+            push_u32_be(&mut data, 0x00000000);
         }
         if let Some(sel) = select {
-            sel.encode(&mut data);
+            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
         }
+        println!("Read Tag Data command data: {:02X?}", data);
         build_host_frame(CommandCode::ReadTagData.as_u8(), &data)
     }
 

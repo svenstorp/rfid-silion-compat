@@ -1,8 +1,9 @@
-import init, { SilionReader, bytesToHex } from "./pkg/rfid_silion_compat.js";
+import init, { SilionReader, bytesToHex, RegionName } from "./pkg/rfid_silion_compat";
 
 let reader: SilionReader | null = null;
 let inventoryLoopRunning = false;
 let stopInProgress = false;
+const tidReadCommand = { readTidWords: 6 };
 
 const logEl = document.getElementById("log");
 if (!logEl) throw new Error("missing #log element");
@@ -52,7 +53,11 @@ async function pumpInventory(): Promise<void> {
           const epc = bytesToHex(msg.tag.epcId);
           const rssi = msg.tag.rssiDbm ?? "n/a";
           const ant = msg.tag.antennaId ?? "n/a";
-          log(`TAG epc=${epc} rssi=${rssi} ant=${ant}`);
+          let tid = "n/a";
+          if (msg.tag.tagData && msg.tag.tagData.length > 0) {
+            tid = bytesToHex(msg.tag.tagData);
+          }
+          log(`TAG epc=${epc} rssi=${rssi} ant=${ant} tid=${tid}`);
           break;
         }
         case "heartbeat": {
@@ -121,11 +126,7 @@ async function main(): Promise<void> {
   req("singleTag").addEventListener("click", async () => {
     if (!reader) return log("not connected");
     try {
-      const option = {
-        // SelectMode::Disabled + metadata enabled
-        selectOptionBits: 0x00,
-        singleTagMetadataEnabled: true,
-      };
+      const option = { type: "disabled" as const };
       const metadataFlags = {
         rssi: true,
         antennaId: true,
@@ -134,7 +135,27 @@ async function main(): Promise<void> {
       };
       const tag = await reader.singleTagInventory(5000, option, metadataFlags);
       const epc = bytesToHex(tag.epcId);
-      log(`SINGLE TAG: epc=${epc} rssi=${tag.rssiDbm ?? "n/a"} ant=${tag.antennaId ?? "n/a"}`);
+      let tid = "n/a";
+      log(`SINGLE TAG: epc=${epc} rssi=${tag.rssiDbm ?? "n/a"} ant=${tag.antennaId ?? "n/a"} tid=${tid}`);
+      const tidTag = await reader.readTagData(
+        5000,
+        {
+          type: "epc" as const,
+          selectLengthBits: tag.epcId.length * 8,
+          selectData: tag.epcId,
+          invert: false,
+        },
+        {
+          dataLength: true,
+        },
+        { name: "Tid" },
+        0,
+        6
+      );
+      if (tidTag.tagData && tidTag.tagData.length > 0) {
+        tid = bytesToHex(tidTag.tagData);
+      }
+      log(`SINGLE TAG: epc=${epc} rssi=${tag.rssiDbm ?? "n/a"} ant=${tag.antennaId ?? "n/a"} tid=${tid}`);
     } catch (err) {
       log(`singleTagInventory failed: ${err}`);
     }
@@ -143,7 +164,7 @@ async function main(): Promise<void> {
   req("start").addEventListener("click", async () => {
     if (!reader) return log("not connected");
     try {
-      await reader.startInventory();
+      await reader.startInventory(tidReadCommand);
       log("inventory started");
       if (!inventoryLoopRunning) {
         void pumpInventory();
@@ -232,7 +253,7 @@ async function main(): Promise<void> {
   req("setCurrentRegion").addEventListener("click", async () => {
     if (!reader) return log("not connected");
     try {
-      const regionName = (req("regionName") as HTMLSelectElement).value;
+      const regionName = (req("regionName") as HTMLSelectElement).value as RegionName;
       await reader.setCurrentRegion({ name: regionName });
       log(`set region to name=${regionName}`);
     } catch (err) {

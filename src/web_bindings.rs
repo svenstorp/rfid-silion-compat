@@ -8,15 +8,14 @@ use wasm_bindgen_futures::JsFuture;
 
 use futures::future::{AbortHandle, Abortable};
 
-use crate::command::AsyncInventoryStartData;
 use crate::parsers::VersionInfo;
 use crate::session::AsyncInventorySession;
-use crate::silion_reader::SilionReader;
+use crate::silion_reader::{ReaderAsyncInventoryStartData, SelectOption, SilionReader};
 use crate::web_serial::WebSerialTransport;
 use crate::{
     AntennaPair, AntennaPortsConfiguration, AntennaPortsOption, AntennaPower,
-    AsyncInventoryMessage, InventoryOption, InventorySearchFlags, MetadataFlags, RegionCode,
-    RunPhase, SelectContent, SelectMode, SelectOptionBits,
+    AsyncInventoryMessage, InventorySearchFlags, MemBank, MetadataFlags,
+    RegionCode, RunPhase,
 };
 
 fn js_error(msg: &str) -> JsValue {
@@ -34,6 +33,72 @@ fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
         .map_err(|e| JsValue::from_str(&format!("serialization error: {e}")))
 }
 
+/// TypeScript declarations appended to generated bindings for strongly typed JS inputs.
+#[wasm_bindgen(typescript_custom_section)]
+const TS_INPUT_TYPES: &str = r#"
+export interface MetadataFlagsInput {
+    readCount?: boolean;
+    rssi?: boolean;
+    antennaId?: boolean;
+    frequency?: boolean;
+    timestamp?: boolean;
+    rfu?: boolean;
+    protocolId?: boolean;
+    dataLength?: boolean;
+}
+
+export type RegionName = "NorthAmerica" | "China1" | "Europe" | "China2" | "FullFrequencyBand";
+
+export interface RegionCodeInput {
+    name: RegionName;
+}
+
+export type MemBankName = "Reserved" | "Epc" | "Tid" | "User";
+
+export interface MemBankInput {
+    name: MemBankName;
+}
+
+export interface EmbeddedCommandInput {
+    readTidWords: number;
+}
+
+export type SelectOption =
+    | { type: "disabled" }
+    | { type: "passwordOnly" }
+    | { type: "epc"; selectLengthBits: number; selectData: Uint8Array | number[]; invert: boolean }
+    | { type: "tid"; selectAddress: number; selectLengthBits: number; selectData: Uint8Array | number[]; invert: boolean }
+    | { type: "userMemory"; selectAddress: number; selectLengthBits: number; selectData: Uint8Array | number[]; invert: boolean }
+    | { type: "epcBank"; selectAddress: number; selectLengthBits: number; selectData: Uint8Array | number[]; invert: boolean };
+"#;
+
+#[wasm_bindgen]
+extern "C" {
+    /// JavaScript metadata flags input type.
+    #[wasm_bindgen(typescript_type = "MetadataFlagsInput")]
+    pub type JsMetadataFlagsInput;
+
+    /// JavaScript select content input type.
+    #[wasm_bindgen(typescript_type = "SelectContentInput")]
+    pub type JsSelectContentInput;
+
+    /// JavaScript region code input type.
+    #[wasm_bindgen(typescript_type = "RegionCodeInput")]
+    pub type JsRegionCodeInput;
+
+    /// JavaScript memory bank input type.
+    #[wasm_bindgen(typescript_type = "MemBankInput")]
+    pub type JsMemBankInput;
+
+    /// JavaScript embedded-command input type.
+    #[wasm_bindgen(typescript_type = "EmbeddedCommandInput")]
+    pub type JsEmbeddedCommandInput;
+
+    /// JavaScript select mode type.
+    #[wasm_bindgen(typescript_type = "SelectOption")]
+    pub type JsSelectOption;
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RegionCodeJs {
@@ -42,9 +107,8 @@ struct RegionCodeJs {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct InventoryOptionJs {
-    select_option_bits: u8,
-    single_tag_metadata_enabled: bool,
+struct MemBankJs {
+    name: &'static str,
 }
 
 #[derive(Serialize)]
@@ -58,54 +122,6 @@ struct MetadataFlagsJs {
     rfu: bool,
     protocol_id: bool,
     data_length: bool,
-}
-
-fn parse_select_content(value: JsValue) -> Result<SelectContent, JsValue> {
-    if value.is_null() || value.is_undefined() || !value.is_object() {
-        return Err(js_error(
-            "select_content must be an object: { addressBits, bitLen, data }",
-        ));
-    }
-
-    let address_bits = Reflect::get(&value, &JsValue::from_str("addressBits"))
-        .map_err(|_| js_error("select_content.addressBits is missing"))?
-        .as_f64()
-        .ok_or_else(|| js_error("select_content.addressBits must be a number"))?;
-    if !(0.0..=u32::MAX as f64).contains(&address_bits) || address_bits.fract() != 0.0 {
-        return Err(js_error("select_content.addressBits must be a u32 integer"));
-    }
-
-    let bit_len = Reflect::get(&value, &JsValue::from_str("bitLen"))
-        .map_err(|_| js_error("select_content.bitLen is missing"))?
-        .as_f64()
-        .ok_or_else(|| js_error("select_content.bitLen must be a number"))?;
-    if !(0.0..=u8::MAX as f64).contains(&bit_len) || bit_len.fract() != 0.0 {
-        return Err(js_error(
-            "select_content.bitLen must be an integer in 0..=255",
-        ));
-    }
-    let bit_len = bit_len as u8;
-
-    let data_value = Reflect::get(&value, &JsValue::from_str("data"))
-        .map_err(|_| js_error("select_content.data is missing"))?;
-    let data = js_value_to_bytes(data_value)?;
-
-    let expected_len = if bit_len == 0 {
-        0
-    } else {
-        ((bit_len as usize) + 7) / 8
-    };
-    if data.len() != expected_len {
-        return Err(js_error(
-            "select_content.data length does not match bitLen (must be ceil(bitLen/8) bytes)",
-        ));
-    }
-
-    Ok(SelectContent {
-        address_bits: address_bits as u32,
-        bit_len,
-        data,
-    })
 }
 
 impl TryFrom<VersionInfo> for JsValue {
@@ -147,17 +163,6 @@ impl TryFrom<RegionCode> for JsValue {
     }
 }
 
-impl TryFrom<InventoryOption> for JsValue {
-    type Error = JsValue;
-
-    fn try_from(value: InventoryOption) -> Result<Self, Self::Error> {
-        to_js_value(&InventoryOptionJs {
-            select_option_bits: value.select_option_bits(),
-            single_tag_metadata_enabled: value.single_tag_metadata_enabled(),
-        })
-    }
-}
-
 impl TryFrom<MetadataFlags> for JsValue {
     type Error = JsValue;
 
@@ -175,45 +180,18 @@ impl TryFrom<MetadataFlags> for JsValue {
     }
 }
 
-fn parse_inventory_option(value: JsValue) -> Result<InventoryOption, JsValue> {
-    if value.is_object() {
-        let mut raw = 0u8;
+impl TryFrom<MemBank> for JsValue {
+    type Error = JsValue;
 
-        let select_option_bits_value =
-            Reflect::get(&value, &JsValue::from_str("selectOptionBits"))
-            .map_err(|_| js_error("option.selectOptionBits is invalid"))?;
-        if !select_option_bits_value.is_undefined() && !select_option_bits_value.is_null() {
-            let select_option_bits = select_option_bits_value
-                .as_f64()
-                .ok_or_else(|| js_error("option.selectOptionBits must be a number"))?;
-            if !(0.0..=0x2F as f64).contains(&select_option_bits)
-                || select_option_bits.fract() != 0.0
-            {
-                return Err(js_error(
-                    "option.selectOptionBits must be an integer in 0..=47",
-                ));
-            }
-            raw |= (select_option_bits as u8) & 0x2F;
-        }
-
-        let single_tag_metadata_enabled_value =
-            Reflect::get(&value, &JsValue::from_str("singleTagMetadataEnabled"))
-                .map_err(|_| js_error("option.singleTagMetadataEnabled is invalid"))?;
-        if !single_tag_metadata_enabled_value.is_undefined()
-            && !single_tag_metadata_enabled_value.is_null()
-        {
-            let enabled = single_tag_metadata_enabled_value
-                .as_bool()
-                .ok_or_else(|| js_error("option.singleTagMetadataEnabled must be a boolean"))?;
-            if enabled {
-                raw |= 0x10;
-            }
-        }
-
-        return Ok(InventoryOption::from_raw(raw));
+    fn try_from(value: MemBank) -> Result<Self, Self::Error> {
+        let name = match value {
+            MemBank::Reserved => "Reserved",
+            MemBank::Epc => "Epc",
+            MemBank::Tid => "Tid",
+            MemBank::User => "User",
+        };
+        to_js_value(&MemBankJs { name })
     }
-
-    Err(js_error("option must be an object with typed fields"))
 }
 
 fn parse_metadata_flags(value: JsValue) -> Result<MetadataFlags, JsValue> {
@@ -248,6 +226,64 @@ fn parse_metadata_flags(value: JsValue) -> Result<MetadataFlags, JsValue> {
     Err(js_error(
         "metadataFlags must be an object with typed boolean fields",
     ))
+}
+
+fn parse_optional_metadata_flags(value: Option<JsValue>) -> Result<Option<MetadataFlags>, JsValue> {
+    match value {
+        Some(v) if v.is_null() || v.is_undefined() => Ok(None),
+        Some(v) => parse_metadata_flags(v).map(Some),
+        None => Ok(None),
+    }
+}
+
+fn parse_select_option(value: JsValue) -> Result<SelectOption, JsValue> {
+    serde_wasm_bindgen::from_value(value)
+        .map_err(|e| JsValue::from_str(&format!("invalid select option: {e}")))
+}
+
+fn parse_embedded_command(
+    value: &JsValue,
+) -> Option<crate::command::InventoryEmbeddedCommandContent> {
+    if value.is_object() {
+        // Look for { readTidWords: N }
+        let tid_words = js_sys::Reflect::get(value, &JsValue::from_str("readTidWords"))
+            .ok()?
+            .as_f64()?;
+        if tid_words > 0.0 && tid_words <= 32.0 && tid_words.fract() == 0.0 {
+            return Some(
+                crate::command::InventoryEmbeddedCommandContent::ReadTagData(
+                    crate::command::EmbeddedReadTagData {
+                        read_membank: crate::command::MemBank::Tid,
+                        read_address_words: 0,
+                        word_count: tid_words as u8,
+                    },
+                ),
+            );
+        }
+    }
+    None
+}
+
+fn parse_mem_bank(value: JsValue) -> Result<MemBank, JsValue> {
+    if value.is_object() {
+        let name_value = Reflect::get(&value, &JsValue::from_str("name"))
+            .map_err(|_| js_error("memBank.name is invalid"))?;
+        if !name_value.is_undefined() && !name_value.is_null() {
+            let name = name_value
+                .as_string()
+                .ok_or_else(|| js_error("memBank.name must be a string"))?;
+            let mem_bank = match name.as_str() {
+                "Reserved" => MemBank::Reserved,
+                "Epc" => MemBank::Epc,
+                "Tid" => MemBank::Tid,
+                "User" => MemBank::User,
+                _ => return Err(js_error("unknown memBank.name")),
+            };
+            return Ok(mem_bank);
+        }
+    }
+
+    Err(js_error("memBank must be an object with { name }"))
 }
 
 fn parse_region_code(value: JsValue) -> Result<RegionCode, JsValue> {
@@ -409,9 +445,9 @@ impl WasmSilionReader {
     /// await reader.setCurrentRegion({ name: "Europe" });
     /// ```
     #[wasm_bindgen(js_name = setCurrentRegion)]
-    pub async fn set_current_region(&self, region_code: JsValue) -> Result<(), JsValue> {
+    pub async fn set_current_region(&self, region_code: JsRegionCodeInput) -> Result<(), JsValue> {
         let mut reader = self.reader_mut()?;
-        let region = parse_region_code(region_code)?;
+        let region = parse_region_code(region_code.into())?;
         reader.set_current_region(region).await.map_err(debug_error)
     }
 
@@ -596,9 +632,10 @@ impl WasmSilionReader {
     /// # Arguments
     ///
     /// * `timeout_ms` - Timeout in milliseconds
-    /// * `option` - Inventory option typed object
-    /// * `metadata_flags` - Metadata flags typed object
-    /// * `select_content` - Optional object `{ addressBits, bitLen, data }`, or `undefined`
+    /// * `select_option` - Select option typed object
+    /// * `metadata_flags` - Optional metadata flags typed object (`undefined`/`null` means EPC-only)
+    ///
+    /// Note: metadata mode is derived automatically from `metadata_flags` presence.
     ///
     /// JavaScript examples:
     ///
@@ -606,77 +643,80 @@ impl WasmSilionReader {
     /// // Typed objects
     /// await reader.singleTagInventory(
     ///   1000,
-    ///   { selectOptionBits: 0x01, singleTagMetadataEnabled: true },
+    ///   { kind: "epc", selectLengthBits: 96, selectData: new Uint8Array(12), invert: false },
     ///   { rssi: true, antennaId: true, timestamp: true },
-    ///   { addressBits: 32, bitLen: 96, data: new Uint8Array(12) },
     /// );
+    ///
+    /// // EPC-only (no metadata)
+    /// await reader.singleTagInventory(1000, { kind: "disabled" }, undefined);
     /// ```
     #[wasm_bindgen(js_name = singleTagInventory)]
     pub async fn single_tag_inventory(
         &self,
         timeout_ms: u16,
-        option: JsValue,
-        metadata_flags: JsValue,
-        select_content: Option<JsValue>,
+        select_option: JsSelectOption,
+        metadata_flags: Option<JsMetadataFlagsInput>,
     ) -> Result<JsValue, JsValue> {
-        let option = parse_inventory_option(option)?;
-        let metadata_flags = parse_metadata_flags(metadata_flags)?;
-        let select_bits = SelectOptionBits::from_raw(option.select_option_bits());
-        if select_bits.extended_data_length() {
-            return Err(js_error(
-                "option bit 0x20 (extended select data length) is not supported by this API",
-            ));
-        }
-
-        let select = match select_content {
-            Some(v) => {
-                if v.is_null() || v.is_undefined() {
-                    None
-                } else {
-                    Some(parse_select_content(v)?)
-                }
-            }
-            None => None,
-        };
-
-        match select_bits.mode() {
-            Some(SelectMode::Disabled) => {
-                if select.is_some() {
-                    return Err(js_error(
-                        "select_content must be undefined when SelectMode is Disabled (0x00)",
-                    ));
-                }
-            }
-            Some(SelectMode::PasswordOnly) => {
-                if select.is_some() {
-                    return Err(js_error(
-                        "select_content must be undefined when SelectMode is PasswordOnly (0x05)",
-                    ));
-                }
-                return Err(js_error(
-                    "SelectMode::PasswordOnly (0x05) is not supported by singleTagInventory because access password is not exposed",
-                ));
-            }
-            Some(SelectMode::Epc)
-            | Some(SelectMode::Tid)
-            | Some(SelectMode::UserMemory)
-            | Some(SelectMode::EpcBank) => {
-                if select.is_none() {
-                    return Err(js_error(
-                        "select_content is required when SelectMode is 0x01..0x04",
-                    ));
-                }
-            }
-            None => {
-                return Err(js_error(
-                    "unsupported select mode in option; expected SelectMode 0x00..0x05",
-                ));
-            }
-        }
+        let select_option = parse_select_option(select_option.into())?;
+        let metadata_flags = parse_optional_metadata_flags(metadata_flags.map(Into::into))?;
 
         let mut reader = self.reader_mut()?;
         let tag = reader
-            .single_tag_inventory(timeout_ms, option, metadata_flags, select)
+            .single_tag_inventory(timeout_ms, select_option, metadata_flags)
+            .await
+            .map_err(debug_error)?;
+        to_js_value(&tag)
+    }
+
+    /// Run command `0x28` (Read Tag Data).
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Timeout in milliseconds
+    /// * `select_option` - Select option typed object
+    /// * `metadata_flags` - Optional metadata flags typed object (`undefined`/`null` means EPC + CRC only)
+    /// * `mem_bank` - Memory bank typed object `{ name: "Reserved"|"Epc"|"Tid"|"User" }`
+    /// * `read_address_words` - Start address in words
+    /// * `word_count` - Number of words to read
+    ///
+    /// Note: metadata mode is derived automatically from `metadata_flags` presence.
+    ///
+    /// JavaScript example:
+    ///
+    /// ```javascript
+    /// await reader.readTagData(
+    ///   1000,
+    ///   { type: "epc", selectLengthBits: 96, selectData: new Uint8Array(12), invert: false },
+    ///   { dataLength: true },
+    ///   { name: "Tid" },
+    ///   0,
+    ///   6,
+    /// );
+    /// ```
+    #[wasm_bindgen(js_name = readTagData)]
+    pub async fn read_tag_data(
+        &self,
+        timeout_ms: u16,
+        select_option: JsSelectOption,
+        metadata_flags: Option<JsMetadataFlagsInput>,
+        mem_bank: JsMemBankInput,
+        read_address_words: u32,
+        word_count: u8,
+    ) -> Result<JsValue, JsValue> {
+        let select_option = parse_select_option(select_option.into())?;
+        let metadata_flags = parse_optional_metadata_flags(metadata_flags.map(Into::into))?;
+        let mem_bank = parse_mem_bank(mem_bank.into())?;
+
+        let mut reader = self.reader_mut()?;
+        let tag = reader
+            .read_tag_data(
+                timeout_ms,
+                select_option,
+                metadata_flags,
+                mem_bank,
+                read_address_words,
+                word_count,
+            )
             .await
             .map_err(debug_error)?;
         to_js_value(&tag)
@@ -684,7 +724,10 @@ impl WasmSilionReader {
 
     /// Start asynchronous inventory with a basic default configuration.
     #[wasm_bindgen(js_name = startInventory)]
-    pub async fn start_inventory(&self) -> Result<(), JsValue> {
+    pub async fn start_inventory(
+        &self,
+        embedded_command: Option<JsEmbeddedCommandInput>,
+    ) -> Result<(), JsValue> {
         if self.session.borrow().is_some() {
             return Err(js_error("inventory is already running"));
         }
@@ -699,16 +742,19 @@ impl WasmSilionReader {
             .with_async_heartbeat(true)
             .with_async_auto_stop(false);
 
-        let start_data = AsyncInventoryStartData {
+        let start_data = ReaderAsyncInventoryStartData {
             metadata_flags: MetadataFlags::default()
                 .with_rssi(true)
                 .with_antenna_id(true)
-                .with_timestamp(true),
-            option: InventoryOption::default(),
-            search_flags,
+                .with_timestamp(true)
+                .with_data_length(true),
+            select_option: SelectOption::Disabled,
+            search_flags: search_flags.with_embedded_command(embedded_command.is_some()),
             access_password: None,
-            select_content: None,
-            embedded_command_content: None,
+            embedded_command_content: embedded_command
+                .map(Into::into)
+                .as_ref()
+                .and_then(parse_embedded_command),
         };
 
         reader

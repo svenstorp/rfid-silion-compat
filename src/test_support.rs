@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::{ReaderTransport, protocol_crc16};
+use crate::{ReaderTransport, frame::protocol_crc16};
 
 /// One scripted request/response interaction for [`MockTransport`].
 #[derive(Debug, Clone, PartialEq, Eq)]

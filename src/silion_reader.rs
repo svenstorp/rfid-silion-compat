@@ -2,8 +2,9 @@ use crate::async_proto::parse_async_payload_owned;
 use crate::client::{ClientError, ReaderClient};
 use crate::codes::{AntennaPortsOption, CommandCode, RegionCode};
 use crate::command::{
-    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, InventoryOption,
-    InventorySearchFlags, MetadataFlags, SelectContent,
+    AntennaPortsConfiguration, AsyncInventoryStartData as CommandAsyncInventoryStartData,
+    AsyncSubcommandCode, InventoryOption, InventorySearchFlags, MemBank, MetadataFlags, SelectContent,
+    SelectMode, SelectOptionBits,
 };
 use crate::error::ProtocolError;
 use crate::parsers::{
@@ -53,6 +54,164 @@ pub enum AsyncInventoryMessage {
         /// Subcommand-specific payload bytes.
         subcommand_data: Vec<u8>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "web-serial", derive(serde::Serialize))]
+#[cfg_attr(feature = "web-serial", derive(serde::Deserialize))]
+#[cfg_attr(feature = "web-serial", serde(tag = "type", rename_all = "camelCase"))]
+/// Tag singulation/select options used by inventory and access helpers.
+pub enum SelectOption {
+    /// Disable select/singulation and operate on the first matching tag.
+    Disabled,
+    /// Select against EPC data.
+    Epc {
+        /// Number of select bits.
+        select_length_bits: u16,
+        /// Raw select bytes.
+        select_data: Vec<u8>,
+        /// Invert select result (match non-equal tags).
+        invert: bool,
+    },
+    /// Select against TID memory bank.
+    Tid {
+        /// Bit address within the bank.
+        select_address: u32,
+        /// Number of select bits.
+        select_length_bits: u16,
+        /// Raw select bytes.
+        select_data: Vec<u8>,
+        /// Invert select result (match non-equal tags).
+        invert: bool,
+    },
+    /// Select against User memory bank.
+    UserMemory {
+        /// Bit address within the bank.
+        select_address: u32,
+        /// Number of select bits.
+        select_length_bits: u16,
+        /// Raw select bytes.
+        select_data: Vec<u8>,
+        /// Invert select result (match non-equal tags).
+        invert: bool,
+    },
+    /// Select against EPC memory bank (Gen2 bank 0x01).
+    EpcBank {
+        /// Bit address within the bank.
+        select_address: u32,
+        /// Number of select bits.
+        select_length_bits: u16,
+        /// Raw select bytes.
+        select_data: Vec<u8>,
+        /// Invert select result (match non-equal tags).
+        invert: bool,
+    },
+    /// Send only access password without select content.
+    PasswordOnly,
+}
+
+impl SelectOption {
+    fn into_option_content(self) -> (InventoryOption, Option<SelectContent>) {
+        match self {
+            SelectOption::Disabled => (InventoryOption::default(), None),
+            SelectOption::Epc {
+                select_length_bits,
+                select_data,
+                invert,
+            } => (
+                SelectOptionBits::new(SelectMode::Epc)
+                    .with_invert_flag(invert)
+                    .with_extended_data_length(select_length_bits > 255)
+                    .into(),
+                Some(SelectContent {
+                    address_bits: 0,
+                    bit_len: select_length_bits,
+                    data: select_data,
+                }),
+            ),
+            SelectOption::Tid {
+                select_address,
+                select_length_bits,
+                select_data,
+                invert,
+            } => (
+                SelectOptionBits::new(SelectMode::Tid)
+                    .with_invert_flag(invert)
+                    .with_extended_data_length(select_length_bits > 255)
+                    .into(),
+                Some(SelectContent {
+                    address_bits: select_address,
+                    bit_len: select_length_bits,
+                    data: select_data,
+                }),
+            ),
+            SelectOption::UserMemory {
+                select_address,
+                select_length_bits,
+                select_data,
+                invert,
+            } => (
+                SelectOptionBits::new(SelectMode::UserMemory)
+                    .with_invert_flag(invert)
+                    .with_extended_data_length(select_length_bits > 255)
+                    .into(),
+                Some(SelectContent {
+                    address_bits: select_address,
+                    bit_len: select_length_bits,
+                    data: select_data,
+                }),
+            ),
+            SelectOption::EpcBank {
+                select_address,
+                select_length_bits,
+                select_data,
+                invert,
+            } => (
+                SelectOptionBits::new(SelectMode::EpcBank)
+                    .with_invert_flag(invert)
+                    .with_extended_data_length(select_length_bits > 255)
+                    .into(),
+                Some(SelectContent {
+                    address_bits: select_address,
+                    bit_len: select_length_bits,
+                    data: select_data,
+                }),
+            ),
+            SelectOption::PasswordOnly => (SelectOptionBits::new(SelectMode::PasswordOnly).into(), None),
+        }
+    }
+}
+
+/// Start configuration for asynchronous inventory.
+///
+/// This wrapper uses [`SelectOption`] so callers do not need to manually map
+/// to low-level `InventoryOption + SelectContent` fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReaderAsyncInventoryStartData {
+    /// Metadata flags controlling which per-tag fields the reader returns.
+    pub metadata_flags: MetadataFlags,
+    /// Tag singulation/select configuration.
+    pub select_option: SelectOption,
+    /// Search flags (2 bytes), same meaning as command `0x22`.
+    pub search_flags: InventorySearchFlags,
+    /// Optional access password (4 bytes) when required by option.
+    pub access_password: Option<u32>,
+    /// Optional typed embedded command content.
+    pub embedded_command_content: Option<crate::InventoryEmbeddedCommandContent>,
+}
+
+impl ReaderAsyncInventoryStartData {
+    fn to_command_data(&self) -> CommandAsyncInventoryStartData {
+        let (option, select_content) = self.select_option.clone().into_option_content();
+        CommandAsyncInventoryStartData {
+            metadata_flags: self.metadata_flags,
+            option,
+            search_flags: self.search_flags,
+            access_password: self.access_password,
+            select_content,
+            embedded_command_content: self.embedded_command_content.clone(),
+        }
+    }
 }
 
 impl<T: ReaderTransport> SilionReader<T> {
@@ -225,10 +384,11 @@ impl<T: ReaderTransport> SilionReader<T> {
     /// Send command `0xAA48` to enable asynchronous inventory.
     pub async fn enable_async_inventory(
         &mut self,
-        start: &AsyncInventoryStartData,
+        start: &ReaderAsyncInventoryStartData,
     ) -> Result<(), ClientError<T::Error>> {
-        let packet =
-            crate::command::HostCommand::async_start(start).map_err(ClientError::Protocol)?;
+        let command_data = start.to_command_data();
+        let packet = crate::command::HostCommand::async_start(&command_data)
+            .map_err(ClientError::Protocol)?;
         let response = self.client.transact_frame(&packet).await?;
         if response.command != CommandCode::AsynchronousInventory as u8 {
             return Err(ClientError::UnexpectedResponseCommand {
@@ -292,7 +452,7 @@ impl<T: ReaderTransport> SilionReader<T> {
     /// # Arguments
     ///
     /// * `timeout_ms` - Maximum time to wait for a tag response in milliseconds
-    /// * `option` - Inventory option flags (see [`InventoryOption`])
+    /// * `option` - Select option flags (see [`SelectOptionBits`])
     /// * `metadata_flags` - Which metadata fields to include in the response
     /// * `select_content` - Optional tag singulation/select rule
     ///
@@ -300,17 +460,17 @@ impl<T: ReaderTransport> SilionReader<T> {
     pub async fn single_tag_inventory(
         &mut self,
         timeout_ms: u16,
-        option: InventoryOption,
-        metadata_flags: MetadataFlags,
-        select_content: Option<SelectContent>,
+        select_option: SelectOption,
+        metadata_flags: Option<MetadataFlags>,
     ) -> Result<TagEpcAndMetaData, ClientError<T::Error>> {
-        // `0x21` requires option bit 4 (`0x10`) whenever Metadata Flags are present.
-        let option = option.with_single_tag_metadata(true);
+        // Derive option bit 4 (`0x10`) from metadata presence.
+        let (option, select_content) = select_option.into_option_content();
+        let option = option.with_single_tag_metadata(metadata_flags.is_some());
 
         let packet = crate::command::HostCommand::single_tag_inventory(
             timeout_ms,
             option,
-            Some(metadata_flags),
+            metadata_flags,
             select_content,
         )
         .map_err(ClientError::Protocol)?;
@@ -333,6 +493,87 @@ impl<T: ReaderTransport> SilionReader<T> {
             parse_single_tag_inventory_response(option.raw(), &frame.data)
                 .map_err(ClientError::Protocol)?;
         Ok(tag)
+    }
+
+    /// Run command `0x28` (Read Tag Data) and parse the returned tag payload.
+    ///
+    /// This helper performs a single-tag read against the requested memory bank,
+    /// optionally including metadata fields in the response.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Maximum time to wait for a tag response in milliseconds
+    /// * `select_option` - Tag singulation/select rule applied before the read
+    /// * `metadata_flags` - Optional metadata fields to request alongside tag data
+    /// * `read_membank` - Memory bank to read from (Gen2 0x01=EPC, 0x02=TID, 0x03=User)
+    /// * `read_address_words` - Start address in 16-bit words within `read_membank`
+    /// * `word_count` - Number of 16-bit words to read (protocol range `1..=96`)
+    ///
+    /// Returns parsed tag data and metadata when enabled, or an error if the command
+    /// fails, times out, or the reader returns a non-success status.
+    pub async fn read_tag_data(
+        &mut self,
+        timeout_ms: u16,
+        select_option: SelectOption,
+        metadata_flags: Option<MetadataFlags>,
+        read_membank: MemBank,
+        read_address_words: u32,
+        word_count: u8,
+    ) -> Result<TagEpcAndMetaData, ClientError<T::Error>> {
+        let (option, select_content) = select_option.into_option_content();
+        let option = option.with_single_tag_metadata(metadata_flags.is_some());
+
+        let packet = crate::command::HostCommand::read_tag_data(
+            timeout_ms,
+            option.raw(),
+            metadata_flags,
+            read_membank,
+            read_address_words,
+            word_count,
+            None,
+            select_content,
+        )
+        .map_err(ClientError::Protocol)?;
+
+        let frame = self.client.transact_frame(&packet).await?;
+        if frame.command != CommandCode::ReadTagData as u8 {
+            return Err(ClientError::UnexpectedResponseCommand {
+                expected: CommandCode::ReadTagData as u8,
+                actual: frame.command,
+            });
+        }
+        if frame.status_raw != 0x0000 {
+            return Err(ClientError::ReaderStatus {
+                status_raw: frame.status_raw,
+                status: frame.status,
+            });
+        }
+
+        let returned_options = InventoryOption::from_raw(frame.data[0]);
+        if returned_options.single_tag_metadata_enabled() {
+            return parse_tag_epc_and_meta_data(
+                metadata_flags.unwrap_or(MetadataFlags::NONE),
+                &frame.data,
+            )
+            .map_err(ClientError::Protocol);
+        } else {
+            let frame_data = frame.data[1..].to_vec();
+            return Ok(TagEpcAndMetaData {
+                read_count: None,
+                rssi_dbm: None,
+                antenna_id: None,
+                frequency_khz: None,
+                timestamp_ms: None,
+                rfu: None,
+                protocol_id: None,
+                tag_data_bit_length: Some(frame_data.len() as u16 * 8),
+                tag_data: Some(frame_data),
+                epc_bit_length: None,
+                pc_word: None,
+                epc_id: Vec::new(),
+                tag_crc: 0,
+            });
+        }
     }
 
     /// Run command `0x65` (Get Frequency Hopping table form).
@@ -444,7 +685,7 @@ mod tests {
     use super::SilionReader;
     use crate::codes::CommandCode;
     use crate::test_support::{MockInteraction, MockTransport, reply_frame};
-    use crate::{AsyncInventoryMessage, InventoryOption, InventorySearchFlags, RegionCode};
+    use crate::{AsyncInventoryMessage, InventorySearchFlags, RegionCode};
 
     #[test]
     fn get_version_and_region() {
@@ -586,6 +827,7 @@ mod tests {
     #[test]
     fn single_tag_inventory_success() {
         use crate::command::MetadataFlags;
+        use crate::silion_reader::SelectOption;
 
         // Construct `0x21` response data in metadata mode:
         // Option (1) + MetadataFlags (2) + EPC ID + Tag CRC
@@ -610,15 +852,14 @@ mod tests {
 
         let mut reader = SilionReader::new(transport);
         let tag = futures::executor::block_on(reader.single_tag_inventory(
-            5000,                            // 5 second timeout
-            InventoryOption::default(),      // option
-            MetadataFlags::from_raw(0x0000), // no metadata fields
-            None,
+            5000,                                  // 5 second timeout
+            SelectOption::Disabled,                // option
+            Some(MetadataFlags::from_raw(0x0000)), // no metadata fields
         ))
         .expect("single tag inventory should succeed");
 
-        assert_eq!(tag.pc_word, 0x0000);
-        assert_eq!(tag.epc_bit_length, 48);
+        assert_eq!(tag.pc_word, Some(0x0000));
+        assert_eq!(tag.epc_bit_length, Some(48));
         assert_eq!(tag.epc_id, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
         assert_eq!(tag.tag_crc, 0x1234);
         assert_eq!(tag.read_count, None); // Not requested

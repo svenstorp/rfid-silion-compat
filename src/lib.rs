@@ -6,45 +6,56 @@
 //! <https://en.silion.com.cn/En/doc_center/ModuleAPI_Docs/Communication_Protocol_Doc/html/Protocol_Introduction.html>
 //! and command pages linked from that document.
 //!
-//! ## Packet Lifecycle
+//! This crate is centered around the high-level [`SilionReader`] API for common
+//! reader operations (version, region, inventory, and tag access).
 //!
-//! At the API boundary there are two levels of representation:
-//! - **Full wire packet**: includes leading header (`0xFF`) and trailing CRC.
-//! - **Parsed frame fields**: command/status plus stripped `data` payload bytes.
+//! ## Typical Workflow
 //!
-//! Builder APIs such as [`build_host_frame`] and [`HostCommand`] return full
-//! wire packets. Parser APIs such as [`parse_reader_frame`] consume full wire
-//! packets and return structured data.
+//! 1. Create a transport (native serial or web serial).
+//! 2. Construct [`SilionReader`] with that transport.
+//! 3. Call typed async methods and work with parsed return values.
 //!
-//! ### Build A Full Host Packet
-//! ```rust
-//! use rfid_silion_compat::build_host_frame;
+//! ## Enable Native Serial Support
 //!
-//! // Get Version (0x03) has an empty data field.
-//! let packet = build_host_frame(0x03, &[]).unwrap();
-//! assert_eq!(packet, vec![0xFF, 0x00, 0x03, 0x1D, 0x0C]);
+//! Add this to your `Cargo.toml` to enable the `serial` transport module:
+//!
+//! ```toml
+//! [dependencies]
+//! rfid-silion-compat = { version = "*", features = ["serial"] }
+//! tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 //! ```
 //!
-//! ### Parse A Full Reader Packet
-//! ```rust
-//! use rfid_silion_compat::parse_reader_frame;
+//! ## Simple Example (native serial)
 //!
-//! // Reader response for Get Run Phase (0x0C), status=0x0000, data=[0x12].
-//! let packet = [0xFF, 0x01, 0x0C, 0x00, 0x00, 0x12, 0x63, 0x43];
-//! let frame = parse_reader_frame(&packet).unwrap();
+//! ```rust,ignore
+//! use rfid_silion_compat::SerialTransport;
+//! use rfid_silion_compat::SilionReader;
 //!
-//! assert_eq!(frame.command, 0x0C);
-//! assert_eq!(frame.status_raw, 0x0000);
-//! assert_eq!(frame.data, vec![0x12]);
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let transport = SerialTransport::open("/dev/ttyUSB0", 115_200)?;
+//! let mut reader = SilionReader::new(transport);
+//!
+//! let version = reader.get_version().await?;
+//! println!("Firmware version: {:02X?}", version.firmware_version);
+//!
+//! let region = reader.get_current_region().await?;
+//! println!("Current region: {region}");
+//! Ok(())
+//! }
 //! ```
 
 mod async_proto;
 mod client;
-mod codes;
-mod command;
+/// Protocol constants and enums for commands, regions, antennas, and statuses.
+pub mod codes;
+/// Low-level command payload types and host packet builders.
+pub mod command;
 mod error;
-mod frame;
-mod parsers;
+/// Wire-frame encoding/decoding primitives for reader/host packets.
+pub mod frame;
+/// Response payload decoders and parsed output data models.
+pub mod parsers;
 mod session;
 mod silion_reader;
 mod transport;
@@ -65,35 +76,38 @@ pub mod web_serial;
 /// wasm-bindgen JavaScript bindings for the reader API.
 pub mod web_bindings;
 
-pub use async_proto::{
-    AsyncPayload, AsyncPayloadOwned, parse_async_payload, parse_async_payload_owned, subcommand_crc,
-};
 pub use client::{ClientError, ReaderClient};
-pub use codes::{AntennaPortsOption, CommandCode, RegionCode, StatusCode};
+pub use codes::{AntennaPortsOption, RegionCode, StatusCode};
 pub use command::{
-    AntennaPortsConfiguration, AsyncInventoryStartData, AsyncSubcommandCode, EmbeddedReadTagData,
-    HostCommand, InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank,
-    MetadataFlags, SelectContent, SelectMode, SelectOptionBits,
+    AntennaPortsConfiguration, EmbeddedReadTagData, InventoryEmbeddedCommandContent,
+    InventorySearchFlags, MemBank, MetadataFlags,
 };
 pub use error::ProtocolError;
-pub use frame::{ReaderFrame, build_host_frame, parse_reader_frame, protocol_crc16};
+pub use frame::ReaderFrame;
 pub use parsers::{
     AntennaPair, AntennaPortsResponse, AntennaPower, AntennaPowerSettling,
     ProtocolConfigurationValue, ReaderConfigurationValue, RegulatoryHopTime, RunPhase,
-    SerialNumberInfo, TagEpcAndMetaData, VersionInfo, parse_antenna_ports_response,
-    parse_available_regions, parse_current_region, parse_current_tag_protocol,
-    parse_current_temperature, parse_frequency_hopping_table, parse_pin_states,
-    parse_protocol_configuration_value, parse_reader_configuration_value,
-    parse_regulatory_hop_time, parse_run_phase, parse_serial_number_info,
-    parse_single_tag_inventory_response, parse_tag_epc_and_meta_data, parse_version_info,
+    SerialNumberInfo, TagEpcAndMetaData, VersionInfo,
 };
 pub use session::AsyncInventorySession;
-pub use silion_reader::{AsyncInventoryMessage, SilionReader};
+pub use silion_reader::{
+    AsyncInventoryMessage, ReaderAsyncInventoryStartData, SelectOption, SilionReader,
+};
+#[cfg(feature = "serial")]
+pub use serial::SerialTransport;
 pub use transport::ReaderTransport;
 
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
+
+    use crate::codes::CommandCode;
+    use crate::command::HostCommand;
+    use crate::frame::{parse_reader_frame, protocol_crc16};
+    use crate::parsers::{
+        parse_antenna_ports_response, parse_frequency_hopping_table, parse_run_phase,
+        parse_version_info,
+    };
 
     use super::*;
 
