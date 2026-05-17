@@ -27,6 +27,16 @@ echo "Building npm package for rfid-silion-compat v$VERSION..."
 # Run wasm-pack to build the bundler target (suitable for Node.js and bundlers)
 wasm-pack build --target bundler --release -- --features web-serial
 
+# Copy npm-focused README into generated package output.
+NPM_README_SOURCE="npm/README.md"
+NPM_README_TARGET="pkg/README.md"
+if [ -f "$NPM_README_SOURCE" ]; then
+  cp "$NPM_README_SOURCE" "$NPM_README_TARGET"
+  echo "Copied npm README to $NPM_README_TARGET"
+else
+  echo "Warning: $NPM_README_SOURCE not found; package README was not updated"
+fi
+
 # Update package.json with the version from Cargo.toml
 PACKAGE_JSON="pkg/package.json"
 if [ -f "$PACKAGE_JSON" ]; then
