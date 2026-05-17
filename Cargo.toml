@@ -2,6 +2,15 @@
 name = "rfid-silion-compat"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "Async Rust library for Silion RFID readers with serial and Web Serial support"
+readme = "README.md"
+repository = "https://github.com/svenstorp/rfid-silion-compat"
+homepage = "https://github.com/svenstorp/rfid-silion-compat"
+documentation = "https://docs.rs/rfid-silion-compat"
+keywords = ["rfid", "uhf", "serial", "wasm", "web-serial"]
+categories = ["api-bindings", "asynchronous", "hardware-support", "wasm"]
 
 [lib]
 crate-type = ["rlib", "cdylib"]

@@ -1,6 +1,7 @@
 {
   "name": "rfid-silion-compat-web-example",
   "version": "0.1.0",
+  "license": "(MIT OR Apache-2.0)",
   "description": "Browser example for rfid-silion-compat RFID library",
   "scripts": {
     "check": "tsc --noEmit",

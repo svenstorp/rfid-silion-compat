@@ -150,6 +150,20 @@ cargo check --features serial
 cargo check --target wasm32-unknown-unknown --features web-serial
 ```
 
+## Contributing and Governance
+
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+
+## License
+
+Licensed under either of:
+
+- MIT ([LICENSE-MIT](LICENSE-MIT))
+- Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+
 ## Project Layout
 
 - [src/lib.rs](src/lib.rs): exports and crate-level docs
