@@ -247,8 +247,16 @@ impl Sgtin96 {
     /// Build an EPC Tag URI (`urn:epc:tag:sgtin-96`) for this decoded SGTIN-96 value.
     pub fn to_tag_uri(self) -> Result<String, ProtocolError> {
         let (_, company_digits, _, item_digits) = Self::partition_info(self.partition)?;
-        let company = format!("{:0width$}", self.company_prefix, width = company_digits as usize);
-        let item = format!("{:0width$}", self.item_reference, width = item_digits as usize);
+        let company = format!(
+            "{:0width$}",
+            self.company_prefix,
+            width = company_digits as usize
+        );
+        let item = format!(
+            "{:0width$}",
+            self.item_reference,
+            width = item_digits as usize
+        );
         Ok(format!(
             "urn:epc:tag:sgtin-96:{}.{}.{}.{}",
             self.filter, company, item, self.serial
@@ -258,8 +266,16 @@ impl Sgtin96 {
     /// Build an EPC Pure Identity URI (`urn:epc:id:sgtin`) for this SGTIN-96 value.
     pub fn to_pure_identity_uri(self) -> Result<String, ProtocolError> {
         let (_, company_digits, _, item_digits) = Self::partition_info(self.partition)?;
-        let company = format!("{:0width$}", self.company_prefix, width = company_digits as usize);
-        let item = format!("{:0width$}", self.item_reference, width = item_digits as usize);
+        let company = format!(
+            "{:0width$}",
+            self.company_prefix,
+            width = company_digits as usize
+        );
+        let item = format!(
+            "{:0width$}",
+            self.item_reference,
+            width = item_digits as usize
+        );
         Ok(format!("urn:epc:id:sgtin:{company}.{item}.{}", self.serial))
     }
 }
@@ -284,7 +300,11 @@ impl Giai96 {
     /// Build an EPC Tag URI (`urn:epc:tag:giai-96`) for this decoded GIAI-96 value.
     pub fn to_tag_uri(self) -> Result<String, ProtocolError> {
         let (_, company_digits, _) = Self::partition_info(self.partition)?;
-        let company = format!("{:0width$}", self.company_prefix, width = company_digits as usize);
+        let company = format!(
+            "{:0width$}",
+            self.company_prefix,
+            width = company_digits as usize
+        );
         Ok(format!(
             "urn:epc:tag:giai-96:{}.{}.{}",
             self.filter, company, self.individual_asset_reference
@@ -294,7 +314,11 @@ impl Giai96 {
     /// Build an EPC Pure Identity URI (`urn:epc:id:giai`) for this GIAI-96 value.
     pub fn to_pure_identity_uri(self) -> Result<String, ProtocolError> {
         let (_, company_digits, _) = Self::partition_info(self.partition)?;
-        let company = format!("{:0width$}", self.company_prefix, width = company_digits as usize);
+        let company = format!(
+            "{:0width$}",
+            self.company_prefix,
+            width = company_digits as usize
+        );
         Ok(format!(
             "urn:epc:id:giai:{company}.{}",
             self.individual_asset_reference
@@ -303,13 +327,13 @@ impl Giai96 {
 }
 
 impl EpcValue {
-        /// Create an EPC value from a typed schema struct.
-        ///
-        /// This is the single generic constructor for supported schema types,
-        /// such as [`Sgtin96`] and [`Giai96`].
-        pub fn from_schema<S: EpcSchema>(schema: S) -> Result<Self, ProtocolError> {
-            schema.encode()
-        }
+    /// Create an EPC value from a typed schema struct.
+    ///
+    /// This is the single generic constructor for supported schema types,
+    /// such as [`Sgtin96`] and [`Giai96`].
+    pub fn from_schema<S: EpcSchema>(schema: S) -> Result<Self, ProtocolError> {
+        schema.encode()
+    }
 
     /// Create an EPC value from raw bytes.
     pub fn new(bytes: Vec<u8>) -> Result<Self, ProtocolError> {
@@ -657,9 +681,9 @@ impl EpcValue {
                 "EPC Tag URI must start with 'urn:epc:tag:'",
             ))?;
 
-        let (tag_scheme, value_part) = body
-            .split_once(':')
-            .ok_or(ProtocolError::InvalidArgument("EPC Tag URI is missing value section"))?;
+        let (tag_scheme, value_part) = body.split_once(':').ok_or(
+            ProtocolError::InvalidArgument("EPC Tag URI is missing value section"),
+        )?;
 
         Self::validate_tag_scheme(tag_scheme)?;
 
@@ -759,21 +783,21 @@ mod tests {
         let epc = EpcValue::from_slice(&[0x30, 0x00, 0x11, 0x22]).expect("valid EPC");
         assert_eq!(epc.to_hex(), "30001122");
 
-        let uri =
-            EpcValue::tag_uri_custom("gid-96", &["1234", "5678", "90"]).expect("valid URI");
+        let uri = EpcValue::tag_uri_custom("gid-96", &["1234", "5678", "90"]).expect("valid URI");
         assert_eq!(uri, "urn:epc:tag:gid-96:1234.5678.90");
 
-        let uri_encoded = EpcValue::tag_uri_custom("sgtin-96", &["3", "0614141", "A/B C"]) 
+        let uri_encoded = EpcValue::tag_uri_custom("sgtin-96", &["3", "0614141", "A/B C"])
             .expect("valid URI with escaping");
         assert_eq!(uri_encoded, "urn:epc:tag:sgtin-96:3.0614141.A%2FB%20C");
 
-        let (scheme, values) = EpcValue::parse_tag_uri_custom(&uri_encoded)
-            .expect("valid URI decode");
+        let (scheme, values) =
+            EpcValue::parse_tag_uri_custom(&uri_encoded).expect("valid URI decode");
         assert_eq!(scheme, "sgtin-96");
         assert_eq!(values, vec!["3", "0614141", "A/B C"]);
 
-        let pure = EpcValue::tag_uri_to_pure_identity_uri("urn:epc:tag:sgtin-96:3.0614141.812345.6789")
-            .expect("valid pure identity conversion");
+        let pure =
+            EpcValue::tag_uri_to_pure_identity_uri("urn:epc:tag:sgtin-96:3.0614141.812345.6789")
+                .expect("valid pure identity conversion");
         assert_eq!(pure, "urn:epc:id:sgtin:0614141.812345.6789");
 
         let uri_with_epc = epc

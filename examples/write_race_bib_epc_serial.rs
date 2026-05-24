@@ -27,7 +27,10 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 #[cfg(feature = "serial")]
-fn compose_asset_reference(race_id: u64, bib_number: u64) -> Result<u64, Box<dyn std::error::Error>> {
+fn compose_asset_reference(
+    race_id: u64,
+    bib_number: u64,
+) -> Result<u64, Box<dyn std::error::Error>> {
     if bib_number > MAX_BIB {
         return Err(format!("bib number must be <= {MAX_BIB}").into());
     }
@@ -118,12 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     reader
-        .write_tag_epc(
-            timeout_ms,
-            select_current_tag,
-            None,
-            &new_epc_bytes,
-        )
+        .write_tag_epc(timeout_ms, select_current_tag, None, &new_epc_bytes)
         .await?;
 
     println!("WriteTagEpc (0x23) succeeded.");

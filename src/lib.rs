@@ -88,8 +88,8 @@ pub use command::{
     AntennaPortsConfiguration, EmbeddedReadTagData, InventoryEmbeddedCommandContent,
     InventorySearchFlags, MemBank, MetadataFlags,
 };
-pub use error::ProtocolError;
 pub use epc::{EpcSchema, EpcValue, Giai96, Sgtin96};
+pub use error::ProtocolError;
 pub use frame::ReaderFrame;
 pub use parsers::{
     AntennaPair, AntennaPortsResponse, AntennaPower, AntennaPowerSettling,
