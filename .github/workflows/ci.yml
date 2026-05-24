@@ -46,6 +46,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -56,3 +61,14 @@ jobs:
 
       - name: Build npm package
         run: ./scripts/build-npm-package.sh
+
+      - name: Install web example dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: examples/web
+
+      - name: Check web example app
+        run: |
+          pnpm run build:wasm
+          pnpm run check
+          pnpm run build
+        working-directory: examples/web
