@@ -14,6 +14,16 @@ npm install rfid-silion-compat
 
 - A browser with Web Serial support
 - A user gesture (for example, button click) before calling `SilionReader.connect(...)`
+- HTTPS (or `http://localhost`) because Web Serial requires a secure context
+- Browser runtime only (not a Node.js runtime package)
+
+## WebAssembly Deployment Considerations
+
+- Always call and await `init()` before creating a reader instance.
+- Ensure the `.wasm` asset is copied and served as a static file by your bundler/deployment.
+- Serve `.wasm` files with MIME type `application/wasm`.
+- In SSR frameworks (for example, Next.js), load and use this package only on the client side.
+- If you use a strict CSP, allow the wasm fetch path and any wasm execution settings required by your target browsers.
 
 ## Quick Start
 

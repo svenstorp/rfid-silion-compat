@@ -141,6 +141,13 @@ Publish package:
 npm publish ./pkg
 ```
 
+## NPM Package (JavaScript/TypeScript)
+
+This repository also ships an npm package for browser-based JS/TS usage:
+
+- Package name: `rfid-silion-compat`
+- npm-focused docs: [npm/README.md](npm/README.md)
+
 ## Validate Locally
 
 ```bash
