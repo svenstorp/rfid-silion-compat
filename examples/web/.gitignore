@@ -2,5 +2,4 @@ node_modules
 pkg
 dist
 *.pem
-pnpm-lock.yaml
 .vite
