@@ -68,6 +68,7 @@ jobs:
 
       - name: Check web example app
         run: |
+          pnpm run build:wasm
           pnpm run check
           pnpm run build
         working-directory: examples/web
