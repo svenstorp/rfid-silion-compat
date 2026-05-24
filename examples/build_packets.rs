@@ -1,4 +1,6 @@
-use rfid_silion_compat::{MemBank, RegionCode, command::HostCommand, command::SelectContent};
+use rfid_silion_compat::{
+    MemBank, RegionCode, command::HostCommand, command::InventoryOption, command::SelectContent,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let get_version = HostCommand::get_version()?;
@@ -17,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let read_tag = HostCommand::read_tag_data(
         1000,
-        0x01,
+        InventoryOption::from_raw(0x01),
         None,
         MemBank::User,
         0x0000_0002,

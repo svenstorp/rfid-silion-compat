@@ -43,7 +43,7 @@ pub struct ReaderFrame {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::parse_reader_frame;
+/// use rfid_silion_compat::frame::parse_reader_frame;
 ///
 /// // Response for Get Run Phase (0x0C), status=0x0000, data=[0x12]
 /// let packet = [0xFF, 0x01, 0x0C, 0x00, 0x00, 0x12, 0x63, 0x43];
@@ -107,7 +107,7 @@ pub fn parse_reader_frame(packet: &[u8]) -> Result<ReaderFrame, ProtocolError> {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::build_host_frame;
+/// use rfid_silion_compat::frame::build_host_frame;
 ///
 /// let packet = build_host_frame(0x03, &[]).unwrap();
 /// assert_eq!(packet, vec![0xFF, 0x00, 0x03, 0x1D, 0x0C]);
@@ -137,7 +137,7 @@ pub fn build_host_frame(command: u8, data: &[u8]) -> Result<Vec<u8>, ProtocolErr
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::protocol_crc16;
+/// use rfid_silion_compat::frame::protocol_crc16;
 ///
 /// let frame_without_crc = [0xFF, 0x00, 0x03];
 /// assert_eq!(protocol_crc16(&frame_without_crc), 0x1D0C);

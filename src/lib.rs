@@ -17,6 +17,7 @@
 //! - [`ReaderAsyncInventoryStartData`]: typed async inventory start configuration.
 //! - [`SelectOption`]: high-level select/singulation input for inventory and access.
 //! - [`AsyncInventoryMessage`]: typed pushed messages from async inventory.
+//! - [`EpcValue`]: high-level EPC wrapper with EPC Tag URI helpers.
 //!
 //! ## Typical Workflow
 //!
@@ -54,6 +55,8 @@ mod client;
 pub mod codes;
 /// Low-level command payload types and host packet builders.
 pub mod command;
+/// EPC value types and EPC URI/binary helpers.
+pub mod epc;
 mod error;
 /// Wire-frame encoding/decoding primitives for reader/host packets.
 pub mod frame;
@@ -86,6 +89,7 @@ pub use command::{
     InventorySearchFlags, MemBank, MetadataFlags,
 };
 pub use error::ProtocolError;
+pub use epc::{EpcSchema, EpcValue, Giai96, Sgtin96};
 pub use frame::ReaderFrame;
 pub use parsers::{
     AntennaPair, AntennaPortsResponse, AntennaPower, AntennaPowerSettling,

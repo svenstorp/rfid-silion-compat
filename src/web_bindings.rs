@@ -721,6 +721,94 @@ impl WasmSilionReader {
         to_js_value(&tag)
     }
 
+    /// Run command `0x23` (Write Tag EPC).
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Timeout in milliseconds
+    /// * `select_option` - Select option typed object
+    /// * `access_password` - Optional access password
+    /// * `epc` - EPC bytes (`Uint8Array` or `number[]`)
+    ///
+    /// JavaScript example:
+    ///
+    /// ```javascript
+    /// await reader.writeTagEpc(
+    ///   1000,
+    ///   { type: "disabled" },
+    ///   undefined,
+    ///   new Uint8Array([0x30, 0x00, 0x11, 0x22, 0x33, 0x44]),
+    /// );
+    /// ```
+    #[wasm_bindgen(js_name = writeTagEpc)]
+    pub async fn write_tag_epc(
+        &self,
+        timeout_ms: u16,
+        select_option: JsSelectOption,
+        access_password: Option<u32>,
+        epc: JsValue,
+    ) -> Result<(), JsValue> {
+        let select_option = parse_select_option(select_option.into())?;
+        let epc = js_value_to_bytes(epc)?;
+
+        let mut reader = self.reader_mut()?;
+        reader
+            .write_tag_epc(timeout_ms, select_option, access_password, &epc)
+            .await
+            .map_err(debug_error)
+    }
+
+    /// Run command `0x24` (Write Tag Data).
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Timeout in milliseconds
+    /// * `select_option` - Select option typed object
+    /// * `write_address_words` - Start address in words
+    /// * `mem_bank` - Memory bank typed object `{ name: "Reserved"|"Epc"|"Tid"|"User" }`
+    /// * `access_password` - Optional access password
+    /// * `write_data` - Data bytes (`Uint8Array` or `number[]`), non-empty and even-length
+    ///
+    /// JavaScript example:
+    ///
+    /// ```javascript
+    /// await reader.writeTagData(
+    ///   1000,
+    ///   { type: "epc", selectLengthBits: 96, selectData: new Uint8Array(12), invert: false },
+    ///   2,
+    ///   { name: "User" },
+    ///   undefined,
+    ///   new Uint8Array([0x12, 0x34]),
+    /// );
+    /// ```
+    #[wasm_bindgen(js_name = writeTagData)]
+    pub async fn write_tag_data(
+        &self,
+        timeout_ms: u16,
+        select_option: JsSelectOption,
+        write_address_words: u32,
+        mem_bank: JsMemBankInput,
+        access_password: Option<u32>,
+        write_data: JsValue,
+    ) -> Result<(), JsValue> {
+        let select_option = parse_select_option(select_option.into())?;
+        let mem_bank = parse_mem_bank(mem_bank.into())?;
+        let write_data = js_value_to_bytes(write_data)?;
+
+        let mut reader = self.reader_mut()?;
+        reader
+            .write_tag_data(
+                timeout_ms,
+                select_option,
+                write_address_words,
+                mem_bank,
+                access_password,
+                &write_data,
+            )
+            .await
+            .map_err(debug_error)
+    }
+
     /// Start asynchronous inventory with a basic default configuration.
     #[wasm_bindgen(js_name = startInventory)]
     pub async fn start_inventory(

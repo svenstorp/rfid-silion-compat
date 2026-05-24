@@ -34,7 +34,7 @@ pub struct VersionInfo {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::parse_version_info;
+/// use rfid_silion_compat::parsers::parse_version_info;
 ///
 /// let data = [
 ///     0x13, 0x04, 0x15, 0x00, 0xA8, 0x00, 0x00, 0x01,
@@ -84,7 +84,8 @@ pub enum RunPhase {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::{parse_run_phase, RunPhase};
+/// use rfid_silion_compat::RunPhase;
+/// use rfid_silion_compat::parsers::parse_run_phase;
 ///
 /// assert_eq!(parse_run_phase(&[0x11]).unwrap(), RunPhase::Bootloader);
 /// assert_eq!(parse_run_phase(&[0x12]).unwrap(), RunPhase::AppFirmware);
@@ -144,7 +145,8 @@ pub fn parse_current_tag_protocol(data: &[u8]) -> Result<u16, ProtocolError> {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::{parse_current_region, RegionCode};
+/// use rfid_silion_compat::RegionCode;
+/// use rfid_silion_compat::parsers::parse_current_region;
 ///
 /// assert_eq!(parse_current_region(&[0x01]).unwrap(), RegionCode::NorthAmerica);
 /// ```
@@ -201,7 +203,7 @@ pub fn parse_pin_states(data: &[u8]) -> Result<Vec<u8>, ProtocolError> {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::parse_frequency_hopping_table;
+/// use rfid_silion_compat::parsers::parse_frequency_hopping_table;
 ///
 /// let data = [0x00, 0x0D, 0xF7, 0x32, 0x00, 0x0D, 0xC8, 0x52];
 /// let freqs = parse_frequency_hopping_table(&data).unwrap();
@@ -1012,9 +1014,8 @@ pub enum AntennaPortsResponse {
 ///
 /// # Examples
 /// ```rust
-/// use rfid_silion_compat::{
-///     parse_antenna_ports_response, AntennaPortsOption, AntennaPortsResponse, AntennaPower,
-/// };
+/// use rfid_silion_compat::{AntennaPortsOption, AntennaPortsResponse, AntennaPower};
+/// use rfid_silion_compat::parsers::parse_antenna_ports_response;
 ///
 /// let data = [0x03, 0x01, 0x0B, 0xB8, 0x0B, 0xB8];
 /// let parsed = parse_antenna_ports_response(AntennaPortsOption::Power, &data).unwrap();

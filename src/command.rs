@@ -107,7 +107,7 @@ impl SelectMode {
 ///
 /// Create a select option for EPC matching:
 /// ```
-/// use rfid_silion_compat::{SelectMode, SelectOptionBits};
+/// use rfid_silion_compat::command::{SelectMode, SelectOptionBits};
 ///
 /// let opts = SelectOptionBits::new(SelectMode::Epc);
 /// assert_eq!(opts.raw(), 0x01);
@@ -115,7 +115,7 @@ impl SelectMode {
 ///
 /// Create a select option with invert flag:
 /// ```
-/// use rfid_silion_compat::{SelectMode, SelectOptionBits};
+/// use rfid_silion_compat::command::{SelectMode, SelectOptionBits};
 ///
 /// let opts = SelectOptionBits::new(SelectMode::UserMemory)
 ///     .with_invert_flag(true);
@@ -758,7 +758,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let packet = HostCommand::raw(0x03, &[]).unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x00, 0x03, 0x1D, 0x0C]);
@@ -818,7 +818,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let packet = HostCommand::get_version().unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x00, 0x03, 0x1D, 0x0C]);
@@ -841,7 +841,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// // 115200 decimal = 0x0001C200
     /// let packet = HostCommand::set_baud_rate(115_200).unwrap();
@@ -881,7 +881,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let packet = HostCommand::get_run_phase().unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x00, 0x0C, 0x1D, 0x03]);
@@ -935,7 +935,7 @@ impl HostCommand {
     /// Performs timed multi-tag inventory and archives tag results into reader
     /// tag buffer for later retrieval by command `0x29`.
     pub fn synchronous_inventory(
-        option: u8,
+        option: InventoryOption,
         search_flags: u16,
         timeout_ms: u16,
         access_password: Option<u32>,
@@ -943,7 +943,7 @@ impl HostCommand {
         embedded_command: Option<&[u8]>,
     ) -> Result<Vec<u8>, ProtocolError> {
         Self::synchronous_inventory_raw_embedded(
-            InventoryOption::from_raw(option),
+            option,
             InventorySearchFlags::from_raw(search_flags),
             timeout_ms,
             access_password,
@@ -1010,11 +1010,11 @@ impl HostCommand {
     /// Retrieves archived tag EPC/metadata records from synchronous inventory.
     pub fn get_tag_buffer(
         metadata_flags: MetadataFlags,
-        option: u8,
+        option: InventoryOption,
     ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::with_capacity(3);
         push_u16_be(&mut data, metadata_flags.raw());
-        data.push(option);
+        data.push(option.raw());
         build_host_frame(CommandCode::GetTagBuffer.as_u8(), &data)
     }
 
@@ -1023,8 +1023,7 @@ impl HostCommand {
     /// Writes EPC data and lets reader update EPC length bits in PC word.
     pub fn write_tag_epc(
         timeout_ms: u16,
-        option: u8,
-        rfu: Option<u8>,
+        option: InventoryOption,
         access_password: Option<u32>,
         select: Option<SelectContent>,
         epc: &[u8],
@@ -1034,15 +1033,19 @@ impl HostCommand {
         }
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
-        data.push(option);
-        if let Some(v) = rfu {
-            data.push(v);
+        data.push(option.raw());
+        if option.raw() == 0x00 {
+            data.push(0x00); // RFU byte required when option is 0x00
         }
-        if let Some(pw) = access_password {
-            push_u32_be(&mut data, pw);
+        if option.raw() != 0x00 {
+            if let Some(pw) = access_password {
+                push_u32_be(&mut data, pw);
+            } else {
+                push_u32_be(&mut data, 0x00000000);
+            }
         }
         if let Some(sel) = select {
-            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
+            sel.encode_with_option(&mut data, option);
         }
         data.extend_from_slice(epc);
         build_host_frame(CommandCode::WriteTagEpc.as_u8(), &data)
@@ -1053,7 +1056,7 @@ impl HostCommand {
     /// Writes user-supplied bytes to a target bank/address on selected tag.
     pub fn write_tag_data(
         timeout_ms: u16,
-        option: u8,
+        option: InventoryOption,
         write_address_words: u32,
         write_membank: MemBank,
         access_password: Option<u32>,
@@ -1072,14 +1075,16 @@ impl HostCommand {
         }
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
-        data.push(option);
+        data.push(option.raw());
         push_u32_be(&mut data, write_address_words);
         data.push(write_membank.as_u8());
         if let Some(pw) = access_password {
             push_u32_be(&mut data, pw);
+        } else {
+            push_u32_be(&mut data, 0x00000000);
         }
         if let Some(sel) = select {
-            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
+            sel.encode_with_option(&mut data, option);
         }
         data.extend_from_slice(write_data);
         build_host_frame(CommandCode::WriteTagData.as_u8(), &data)
@@ -1090,7 +1095,7 @@ impl HostCommand {
     /// Applies Gen2 lock actions defined by `mask_bits` and `action_bits`.
     pub fn lock_tag(
         timeout_ms: u16,
-        option: u8,
+        option: InventoryOption,
         access_password: u32,
         mask_bits: u16,
         action_bits: u16,
@@ -1098,12 +1103,12 @@ impl HostCommand {
     ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
-        data.push(option);
+        data.push(option.raw());
         push_u32_be(&mut data, access_password);
         push_u16_be(&mut data, mask_bits);
         push_u16_be(&mut data, action_bits);
         if let Some(sel) = select {
-            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
+            sel.encode_with_option(&mut data, option);
         }
         build_host_frame(CommandCode::LockTag.as_u8(), &data)
     }
@@ -1113,18 +1118,17 @@ impl HostCommand {
     /// Permanently kills a matching tag using `kill_password`.
     pub fn kill_tag(
         timeout_ms: u16,
-        option: u8,
+        option: InventoryOption,
         kill_password: u32,
-        rfu: u8,
         select: Option<SelectContent>,
     ) -> Result<Vec<u8>, ProtocolError> {
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
-        data.push(option);
+        data.push(option.raw());
         push_u32_be(&mut data, kill_password);
-        data.push(rfu);
+        data.push(0x00); // RFU byte required by protocol docs
         if let Some(sel) = select {
-            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
+            sel.encode_with_option(&mut data, option);
         }
         build_host_frame(CommandCode::KillTag.as_u8(), &data)
     }
@@ -1134,7 +1138,7 @@ impl HostCommand {
     /// Reads memory words from a tag bank and optionally requests metadata.
     pub fn read_tag_data(
         timeout_ms: u16,
-        option: u8,
+        option: InventoryOption,
         metadata_flags: Option<MetadataFlags>,
         read_membank: MemBank,
         read_address_words: u32,
@@ -1149,7 +1153,7 @@ impl HostCommand {
         }
         let mut data = Vec::new();
         push_u16_be(&mut data, timeout_ms);
-        data.push(option);
+        data.push(option.raw());
         if let Some(flags) = metadata_flags {
             push_u16_be(&mut data, flags.raw());
         }
@@ -1162,7 +1166,7 @@ impl HostCommand {
             push_u32_be(&mut data, 0x00000000);
         }
         if let Some(sel) = select {
-            sel.encode_with_option(&mut data, InventoryOption::from_raw(option));
+            sel.encode_with_option(&mut data, option);
         }
         println!("Read Tag Data command data: {:02X?}", data);
         build_host_frame(CommandCode::ReadTagData.as_u8(), &data)
@@ -1175,7 +1179,8 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::{AntennaPair, AntennaPortsConfiguration, HostCommand};
+    /// use rfid_silion_compat::{AntennaPair, AntennaPortsConfiguration};
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let packet = HostCommand::set_antenna_ports(&AntennaPortsConfiguration::AccessPair(
     ///     AntennaPair { tx: 0x01, rx: 0x01 },
@@ -1218,7 +1223,8 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::{HostCommand, RegionCode};
+    /// use rfid_silion_compat::RegionCode;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let packet = HostCommand::set_current_region(RegionCode::NorthAmerica).unwrap();
     /// assert_eq!(packet, vec![0xFF, 0x01, 0x97, 0x01, 0x4B, 0xBC]);
@@ -1286,7 +1292,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let table_req = HostCommand::get_frequency_hopping(None).unwrap();
     /// assert_eq!(table_req, vec![0xFF, 0x00, 0x65, 0x1D, 0x6A]);
@@ -1335,7 +1341,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// // Protocol 0x05 (GEN2), parameter 0x00 (session)
     /// let packet = HostCommand::get_protocol_configuration(0x05, 0x00).unwrap();
@@ -1367,10 +1373,10 @@ impl HostCommand {
     /// # Examples
     /// ```rust
     /// use rfid_silion_compat::{
-    ///     AsyncInventoryStartData, EmbeddedReadTagData, HostCommand,
-    ///     InventoryEmbeddedCommandContent, InventoryOption, InventorySearchFlags, MemBank,
+    ///     EmbeddedReadTagData, InventoryEmbeddedCommandContent, InventorySearchFlags, MemBank,
     ///     MetadataFlags,
     /// };
+    /// use rfid_silion_compat::command::{AsyncInventoryStartData, HostCommand, InventoryOption};
     ///
     /// let search_flags = InventorySearchFlags::new()
     ///     .with_async_heartbeat(true)
@@ -1407,7 +1413,7 @@ impl HostCommand {
     ///
     /// # Examples
     /// ```rust
-    /// use rfid_silion_compat::HostCommand;
+    /// use rfid_silion_compat::command::HostCommand;
     ///
     /// let packet = HostCommand::async_stop().unwrap();
     /// assert_eq!(

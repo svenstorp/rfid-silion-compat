@@ -527,7 +527,7 @@ impl<T: ReaderTransport> SilionReader<T> {
 
         let packet = crate::command::HostCommand::read_tag_data(
             timeout_ms,
-            option.raw(),
+            option,
             metadata_flags,
             read_membank,
             read_address_words,
@@ -576,6 +576,100 @@ impl<T: ReaderTransport> SilionReader<T> {
                 tag_crc: 0,
             });
         }
+    }
+
+    /// Run command `0x23` (Write Tag EPC).
+    ///
+    /// This helper writes a new EPC to a selected tag. The reader updates EPC
+    /// length bits in the PC word according to the provided EPC payload.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Maximum time to wait for a tag response in milliseconds
+    /// * `select_option` - Tag singulation/select rule applied before the write
+    /// * `access_password` - Optional access password when required by the tag
+    /// * `epc` - New EPC bytes to write
+    pub async fn write_tag_epc(
+        &mut self,
+        timeout_ms: u16,
+        select_option: SelectOption,
+        access_password: Option<u32>,
+        epc: &[u8],
+    ) -> Result<(), ClientError<T::Error>> {
+        let (option, select_content) = select_option.into_option_content();
+        let packet = crate::command::HostCommand::write_tag_epc(
+            timeout_ms,
+            option,
+            access_password,
+            select_content,
+            epc,
+        )
+        .map_err(ClientError::Protocol)?;
+
+        let frame = self.client.transact_frame(&packet).await?;
+        if frame.command != CommandCode::WriteTagEpc as u8 {
+            return Err(ClientError::UnexpectedResponseCommand {
+                expected: CommandCode::WriteTagEpc as u8,
+                actual: frame.command,
+            });
+        }
+        if frame.status_raw != 0x0000 {
+            return Err(ClientError::ReaderStatus {
+                status_raw: frame.status_raw,
+                status: frame.status,
+            });
+        }
+        Ok(())
+    }
+
+    /// Run command `0x24` (Write Tag Data).
+    ///
+    /// This helper writes bytes to a selected memory bank and word address on
+    /// a selected tag.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout_ms` - Maximum time to wait for a tag response in milliseconds
+    /// * `select_option` - Tag singulation/select rule applied before the write
+    /// * `write_address_words` - Start address in 16-bit words within `write_membank`
+    /// * `write_membank` - Memory bank to write (Gen2 0x01=EPC, 0x02=TID, 0x03=User)
+    /// * `access_password` - Optional access password when required by the tag
+    /// * `write_data` - Bytes to write (must be non-empty and even-length)
+    pub async fn write_tag_data(
+        &mut self,
+        timeout_ms: u16,
+        select_option: SelectOption,
+        write_address_words: u32,
+        write_membank: MemBank,
+        access_password: Option<u32>,
+        write_data: &[u8],
+    ) -> Result<(), ClientError<T::Error>> {
+        let (option, select_content) = select_option.into_option_content();
+        let packet = crate::command::HostCommand::write_tag_data(
+            timeout_ms,
+            option,
+            write_address_words,
+            write_membank,
+            access_password,
+            select_content,
+            write_data,
+        )
+        .map_err(ClientError::Protocol)?;
+
+        let frame = self.client.transact_frame(&packet).await?;
+        if frame.command != CommandCode::WriteTagData as u8 {
+            return Err(ClientError::UnexpectedResponseCommand {
+                expected: CommandCode::WriteTagData as u8,
+                actual: frame.command,
+            });
+        }
+        if frame.status_raw != 0x0000 {
+            return Err(ClientError::ReaderStatus {
+                status_raw: frame.status_raw,
+                status: frame.status,
+            });
+        }
+        Ok(())
     }
 
     /// Run command `0x65` (Get Frequency Hopping table form).
