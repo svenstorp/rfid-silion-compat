@@ -16,6 +16,6 @@
   "devDependencies": {
     "terser": "^5.47.1",
     "typescript": "^6",
-    "vite": "^5"
+    "vite": "^8"
   }
 }
